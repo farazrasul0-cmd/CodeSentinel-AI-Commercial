@@ -1,4 +1,4 @@
-export type JobStatus =
+﻿export type JobStatus =
   | "QUEUED"
   | "CLONING"
   | "INDEXING"
@@ -13,6 +13,111 @@ export type JobStatus =
 export type FindingSeverity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
 export type FindingCategory = "SECURITY" | "CODE_SMELL" | "BUG_RISK" | "PERFORMANCE" | "MAINTAINABILITY" | "ARCHITECTURE";
 export type RiskTier = "CRITICAL" | "HIGH" | "MODERATE" | "LOW";
+
+// Commercial RBAC & Billing Types
+export type UserRole = "OWNER" | "ADMIN" | "MEMBER" | "VIEWER";
+export type OrgPlan = "FREE" | "TEAM" | "ENTERPRISE";
+
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  plan: OrgPlan;
+  max_seats: number;
+  active_seats_30d: number;
+  subscription_status: string;
+  avatar_url?: string;
+}
+
+export interface TeamMember {
+  id: string;
+  user_id: string;
+  email: string;
+  username: string;
+  full_name?: string;
+  role: UserRole;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface ConnectedRepo {
+  id: string;
+  name: string;
+  full_name: string;
+  private: boolean;
+  pr_review_enabled: boolean;
+  secret_scanning_enabled: boolean;
+  quality_gate_enabled: boolean;
+  min_rqi_score: number;
+  active_prs_count: number;
+  last_analyzed_at?: string;
+}
+
+export interface PRDiffLine {
+  type: "add" | "del" | "context";
+  content: string;
+  old_line?: number;
+  new_line?: number;
+}
+
+export interface PRInlineSuggestion {
+  id: string;
+  file_path: string;
+  line_start: number;
+  line_end: number;
+  severity: FindingSeverity;
+  rule_id: string;
+  title: string;
+  explanation: string;
+  suggested_patch: string;
+  applied?: boolean;
+}
+
+export interface PRDiffHunk {
+  file_path: string;
+  hunk_header: string;
+  lines: PRDiffLine[];
+  suggestions: PRInlineSuggestion[];
+}
+
+export interface PRReviewItem {
+  id: string;
+  pr_number: number;
+  pr_title: string;
+  repo_full_name: string;
+  author: string;
+  head_sha: string;
+  base_sha: string;
+  status: "success" | "failure" | "pending";
+  rqi_score: number;
+  rqi_delta: number;
+  inline_comments_count: number;
+  critical_issues: number;
+  summary: string;
+  diff_hunks: PRDiffHunk[];
+  created_at: string;
+}
+
+export interface BillingSubscriptionDetails {
+  organization_id: string;
+  plan: OrgPlan;
+  subscription_status: string;
+  max_seats: number;
+  active_seats_30d: number;
+  monthly_scans_used: number;
+  max_monthly_scans: number;
+  entitlements: {
+    allow_private_repos: boolean;
+    allow_inline_suggestions: boolean;
+    allow_secret_scanning: boolean;
+    allow_custom_rules: boolean;
+    priority_queue: boolean;
+  };
+  active_authors?: {
+    github_author: string;
+    last_pr_at: string;
+  }[];
+}
 
 export interface Repository {
   id: string;
@@ -236,4 +341,3 @@ export interface BenchmarkSuiteResult {
   rq3_false_positive_suppression: BenchmarkExperimentRQ3;
   conclusion: string;
 }
-
