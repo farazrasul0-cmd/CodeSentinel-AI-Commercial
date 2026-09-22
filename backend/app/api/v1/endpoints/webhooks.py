@@ -1,18 +1,22 @@
-"""GitHub Webhook Ingestion Endpoint."""
+﻿"""Commercial GitHub Webhook Ingestion with In-Place PR Reviews and Quality Gates."""
 
 import json
+from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import logger
 from app.domain.enums import JobStatus
 from app.infrastructure.db.models.analysis_job import AnalysisJob
+from app.infrastructure.db.models.organization import Organization
 from app.infrastructure.db.models.repository import Repository
 from app.infrastructure.db.session import get_db_session
+from app.infrastructure.github.client import github_pr_client
 from app.infrastructure.github.webhook_handler import github_webhook_handler
-from app.repositories.analysis_job_repo import AnalysisJobRepo
-from app.repositories.repository_repo import RepositoryRepo
+from app.services.pr_analysis_service import PRAnalysisService
+from app.services.pr_comment_service import PRCommentService
 
 router = APIRouter(prefix="/webhooks", tags=["Webhooks"])
 
@@ -23,70 +27,112 @@ async def receive_github_webhook(
     x_hub_signature_256: str | None = Header(None),
     x_github_event: str | None = Header(None),
     session: AsyncSession = Depends(get_db_session),
-):
-    """Receives and validates GitHub webhook events using constant-time HMAC comparison."""
+) -> dict[str, Any]:
+    """Ingests and validates GitHub App webhooks, executing diff-targeted scans and in-place reviews."""
     raw_body = await request.body()
 
-    # 1. Verify HMAC SHA-256 signature
+    # 1. Constant-time HMAC SHA-256 signature verification
     if not github_webhook_handler.verify_signature(raw_body, x_hub_signature_256):
-        logger.warning("Rejected webhook due to invalid X-Hub-Signature-256 header")
+        logger.warning("Rejected webhook due to invalid X-Hub-Signature-256 signature")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing X-Hub-Signature-256 signature",
         )
 
     try:
-        data = json.loads(raw_body.decode("utf-8"))
-        payload = github_webhook_handler.parse_payload(data)
+        payload = json.loads(raw_body.decode("utf-8"))
     except Exception as e:
         logger.error(f"Failed to parse webhook JSON payload: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid webhook payload: {e}",
+            detail=f"Invalid webhook JSON payload: {e}",
         ) from e
 
-    # 2. Process Pull Request events
-    if x_github_event == "pull_request" and payload.pull_request:
-        pr = payload.pull_request
-        repo_info = payload.repository
+    # 2. Handle GitHub App Installation Events
+    if x_github_event == "installation":
+        action = payload.get("action")
+        installation_id = payload.get("installation", {}).get("id")
+        account_login = payload.get("installation", {}).get("account", {}).get("login")
 
-        if payload.action not in ("opened", "synchronize", "reopened"):
-            return {"status": "ignored", "action": payload.action}
+        if action == "created" and installation_id and account_login:
+            stmt = select(Organization).where(Organization.slug.like(f"{account_login.lower()}%"))
+            res = await session.execute(stmt)
+            org = res.scalars().first()
+            if org:
+                org.github_installation_id = installation_id
+                await session.commit()
+                logger.info(f"Linked GitHub installation {installation_id} to Organization '{org.name}'")
 
-        # Find or create repository
-        repo_repo = RepositoryRepo(session)
-        existing_repo = await repo_repo.get_by_url(repo_info.clone_url)
-        if not existing_repo:
-            new_repo = Repository(
-                name=repo_info.name,
-                url=repo_info.clone_url,
-                default_branch=repo_info.default_branch,
+        return {"status": "installation_handled", "action": action, "installation_id": installation_id}
+
+    # 3. Handle Pull Request Events
+    if x_github_event == "pull_request":
+        action = payload.get("action")
+        if action not in ("opened", "synchronize", "reopened"):
+            return {"status": "ignored", "action": action, "event": "pull_request"}
+
+        pr = payload.get("pull_request", {})
+        repo_data = payload.get("repository", {})
+        repo_full_name = repo_data.get("full_name") or "unknown/repo"
+        clone_url = repo_data.get("clone_url", "")
+        pr_number = pr.get("number")
+        head_sha = pr.get("head", {}).get("sha")
+        head_ref = pr.get("head", {}).get("ref")
+
+        if not (pr_number and head_sha):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Missing pr.number or head.sha in pull_request payload",
             )
-            existing_repo = await repo_repo.create(new_repo)
-            await session.commit()
 
-        # Create queued analysis job for the PR commit
+        # Ensure repository record exists
+        stmt = select(Repository).where(Repository.url == clone_url)
+        res = await session.execute(stmt)
+        repo_record = res.scalar_one_or_none()
+        if not repo_record:
+            repo_record = Repository(
+                name=repo_data.get("name", repo_full_name.split("/")[-1]),
+                url=clone_url or f"https://github.com/{repo_full_name}",
+                default_branch=repo_data.get("default_branch", "main"),
+            )
+            session.add(repo_record)
+            await session.commit()
+            await session.refresh(repo_record)
+
+        # Log analysis job
         job = AnalysisJob(
-            repository_id=existing_repo.id,
-            branch=pr.head.ref,
-            commit_sha=pr.head.sha,
-            status=JobStatus.QUEUED,
-            current_stage="WEBHOOK_RECEIVED",
-            progress_percent=0.0,
+            repository_id=repo_record.id,
+            branch=head_ref or "pr-branch",
+            commit_sha=head_sha,
+            status=JobStatus.COMPLETED,
+            current_stage="PR_DIFF_REVIEW_COMPLETED",
+            progress_percent=100.0,
         )
-        job_repo = AnalysisJobRepo(session)
-        job = await job_repo.create(job)
+        session.add(job)
         await session.commit()
 
-        logger.info(
-            f"Queued Analysis Job {job.id} for PR #{pr.number} ({pr.head.ref} @ {pr.head.sha[:7]})"
+        # Run Diff-Targeted PR Analysis
+        analysis_service = PRAnalysisService(client=github_pr_client)
+        analysis_result = await analysis_service.analyze_pull_request(
+            repo_full_name=repo_full_name,
+            pr_number=pr_number,
+            commit_sha=head_sha,
         )
+
+        # Orchestrate In-Place Summary, Inline Fixes, and Check Run
+        comment_service_res = await PRCommentService.execute_pr_review_actions(analysis_result, client=github_pr_client)
+
         return {
             "status": "accepted",
             "job_id": job.id,
-            "repository_id": existing_repo.id,
-            "pr_number": pr.number,
-            "commit_sha": pr.head.sha,
+            "repository_id": repo_record.id,
+            "action": action,
+            "repo": repo_full_name,
+            "pr_number": pr_number,
+            "commit_sha": head_sha,
+            "quality_gate_passed": analysis_result.quality_gate_passed,
+            "issues_count": len(analysis_result.issues),
+            "review_actions": comment_service_res,
         }
 
     return {"status": "event_acknowledged", "event": x_github_event}
