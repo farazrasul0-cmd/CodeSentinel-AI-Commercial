@@ -15,6 +15,7 @@ from app.infrastructure.db.models.repository import Repository
 from app.infrastructure.db.session import get_db_session
 from app.infrastructure.github.client import github_pr_client
 from app.infrastructure.github.webhook_handler import github_webhook_handler
+from app.services.entitlement_service import EntitlementService
 from app.services.pr_analysis_service import PRAnalysisService
 from app.services.pr_comment_service import PRCommentService
 
@@ -99,6 +100,29 @@ async def receive_github_webhook(
             await session.commit()
             await session.refresh(repo_record)
 
+        # 4. Entitlement & Seat Metering Check
+        commit_author = pr.get("user", {}).get("login") or "author"
+        author_email = pr.get("user", {}).get("email") or f"{commit_author}@users.noreply.github.com"
+        quota_warning = None
+
+        if repo_record.organization_id:
+            org_stmt = select(Organization).where(Organization.id == repo_record.organization_id)
+            org_res = await session.execute(org_stmt)
+            org = org_res.scalar_one_or_none()
+            if org:
+                is_permitted, quota_warning, _ = await EntitlementService.evaluate_scan_permission(
+                    session=session,
+                    org=org,
+                    is_private_repo=repo_data.get("private", False),
+                    author_email=author_email,
+                )
+                if not is_permitted:
+                    return {
+                        "status": "rejected",
+                        "reason": quota_warning,
+                        "pr_number": pr_number,
+                    }
+
         # Log analysis job
         job = AnalysisJob(
             repository_id=repo_record.id,
@@ -119,6 +143,10 @@ async def receive_github_webhook(
             commit_sha=head_sha,
         )
 
+        # Append soft-gating notice if active seats exceed quota
+        if quota_warning:
+            analysis_result.summary_markdown += f"\n\n> ⚠️ **Quota Notice**: {quota_warning}\n"
+
         # Orchestrate In-Place Summary, Inline Fixes, and Check Run
         comment_service_res = await PRCommentService.execute_pr_review_actions(analysis_result, client=github_pr_client)
 
@@ -132,6 +160,7 @@ async def receive_github_webhook(
             "commit_sha": head_sha,
             "quality_gate_passed": analysis_result.quality_gate_passed,
             "issues_count": len(analysis_result.issues),
+            "quota_warning": quota_warning,
             "review_actions": comment_service_res,
         }
 

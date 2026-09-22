@@ -4,6 +4,7 @@ from app.infrastructure.db.models.analysis_job import AnalysisJob
 from app.infrastructure.db.models.analysis_report import AnalysisReport
 from app.infrastructure.db.models.api_key import APIKey
 from app.infrastructure.db.models.audit_log import AuditLog
+from app.infrastructure.db.models.billing import ActiveAuthor, ProcessedWebhookEvent
 from app.infrastructure.db.models.defect_prediction import DefectPrediction
 from app.infrastructure.db.models.file_metric import FileMetric
 from app.infrastructure.db.models.issue import Issue
@@ -26,4 +27,6 @@ __all__ = [
     "Issue",
     "DefectPrediction",
     "ReviewComment",
+    "ProcessedWebhookEvent",
+    "ActiveAuthor",
 ]

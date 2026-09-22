@@ -65,6 +65,12 @@ class Settings(BaseSettings):
     GITHUB_APP_PRIVATE_KEY: str | None = None
     GITHUB_APP_WEBHOOK_SECRET: str | None = None
 
+    # Stripe Commercial Billing
+    STRIPE_API_KEY: str | None = None
+    STRIPE_WEBHOOK_SECRET: str | None = None
+    STRIPE_PRICE_ID_TEAM: str = "price_team_monthly"
+    STRIPE_PRICE_ID_ENTERPRISE: str = "price_enterprise_monthly"
+
     # Redis / Celery Dual-Lane Queues
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
