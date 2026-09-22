@@ -1,4 +1,4 @@
-"""Domain enums for analysis status, finding severities, and risk tiers."""
+﻿"""Domain enums for analysis status, finding severities, risk tiers, and multi-tenant RBAC."""
 
 import enum
 
@@ -44,3 +44,24 @@ class CommentStatus(enum.StrEnum):
     PENDING = "PENDING"
     ACCEPTED = "ACCEPTED"
     DISMISSED = "DISMISSED"
+
+
+class UserRole(enum.StrEnum):
+    OWNER = "OWNER"
+    ADMIN = "ADMIN"
+    MEMBER = "MEMBER"
+    VIEWER = "VIEWER"
+
+
+class OrgPlan(enum.StrEnum):
+    FREE = "FREE"
+    TEAM = "TEAM"
+    ENTERPRISE = "ENTERPRISE"
+
+
+ROLE_HIERARCHY: dict[UserRole, int] = {
+    UserRole.VIEWER: 10,
+    UserRole.MEMBER: 20,
+    UserRole.ADMIN: 30,
+    UserRole.OWNER: 40,
+}

@@ -1,9 +1,9 @@
-"""SQLAlchemy 2.0 Base and Mixins."""
+﻿"""SQLAlchemy 2.0 Base and Mixins with Multi-Tenant Support."""
 
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, String
+from sqlalchemy import DateTime, ForeignKey, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -41,4 +41,15 @@ class TimestampMixin:
         default=utc_now,
         onupdate=utc_now,
         nullable=False,
+    )
+
+
+class TenantMixin:
+    """Provides organization_id multi-tenant column and index for enterprise isolation."""
+
+    organization_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )

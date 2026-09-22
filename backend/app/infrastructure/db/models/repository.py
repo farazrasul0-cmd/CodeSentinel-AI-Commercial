@@ -1,19 +1,26 @@
-"""Repository ORM model."""
+﻿"""Repository ORM model with Multi-Tenant Organization scoping."""
 
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, Boolean, String, Text
+from sqlalchemy import JSON, Boolean, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infrastructure.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
     from app.infrastructure.db.models.analysis_job import AnalysisJob
+    from app.infrastructure.db.models.organization import Organization
 
 
 class Repository(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "repositories"
 
+    organization_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     url: Mapped[str] = mapped_column(String(512), unique=True, index=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -24,6 +31,10 @@ class Repository(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # Relationships
+    organization: Mapped["Organization | None"] = relationship(
+        "Organization",
+        back_populates="repositories",
+    )
     jobs: Mapped[list["AnalysisJob"]] = relationship(
         "AnalysisJob",
         back_populates="repository",

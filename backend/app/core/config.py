@@ -1,4 +1,4 @@
-import json
+﻿import json
 from typing import Any
 
 from pydantic import field_validator
@@ -50,22 +50,40 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite+aiosqlite:///./quality_platform.db"
     DATABASE_ECHO: bool = False
 
-    # Redis / Celery
+    # Security, JWT & Envelope Encryption
+    JWT_SECRET_KEY: str = "codesentinel-jwt-secret-key-production-ready-min-32chars"
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+    ENCRYPTION_KEY: str = "k_B9u4H1pE6mXj7L8zY2qR5wT0aV3sD1fG8hJ9kL2m="
+
+    # GitHub OAuth & GitHub App Integration
+    GITHUB_CLIENT_ID: str | None = None
+    GITHUB_CLIENT_SECRET: str | None = None
+    GITHUB_OAUTH_REDIRECT_URI: str = "http://localhost:5173/auth/callback"
+    GITHUB_APP_ID: str | None = None
+    GITHUB_APP_PRIVATE_KEY: str | None = None
+    GITHUB_APP_WEBHOOK_SECRET: str | None = None
+
+    # Redis / Celery Dual-Lane Queues
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"
+    CELERY_PR_QUEUE: str = "pr_lane"
+    CELERY_BATCH_QUEUE: str = "batch_lane"
 
     # Qdrant Vector Store
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6333
     QDRANT_COLLECTION_NAME: str = "code_symbols"
 
-    # Ingestion Sandboxing
+    # Ingestion Sandboxing & Resource Guards
     MAX_REPO_SIZE_MB: int = 250
     GIT_CLONE_TIMEOUT_SECONDS: int = 60
     TEMP_STORAGE_PATH: str = "./temp_repos"
+    PR_MAX_INLINE_COMMENTS: int = 5
 
     # AI Engine
     OPENAI_API_KEY: str | None = None

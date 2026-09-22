@@ -1,14 +1,13 @@
-"""Database async session and engine setup."""
+﻿"""Database async session and engine setup with PostgreSQL RLS support."""
 
 from collections.abc import AsyncGenerator
 
-from sqlalchemy import event
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 
-# In-memory or local SQLite / PostgreSQL engine
 connect_args = {"timeout": 30.0} if "sqlite" in settings.DATABASE_URL else {}
 pool_kwargs = {"poolclass": NullPool} if "sqlite" in settings.DATABASE_URL else {}
 
@@ -35,6 +34,14 @@ async_session_factory = async_sessionmaker(
     autocommit=False,
     autoflush=False,
 )
+
+
+async def set_tenant_context(session: AsyncSession, organization_id: str | None) -> None:
+    """Configures PostgreSQL session variable for Row-Level Security (RLS)."""
+    if organization_id and "postgresql" in str(session.bind.url if session.bind else ""):
+        # Sanitize UUID to prevent SQL injection in session setting
+        safe_org_id = organization_id.replace("'", "")
+        await session.execute(text(f"SET LOCAL app.current_org_id = '{safe_org_id}'"))
 
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
