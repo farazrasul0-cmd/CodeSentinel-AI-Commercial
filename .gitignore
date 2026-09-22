@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # AI-Powered Software Quality Analysis Platform .gitignore
 # ==============================================================================
 
@@ -54,7 +54,8 @@ qdrant_data/
 postgres_data/
 redis_data/
 temp_repos/
-storage/
+/storage/
+storage_artifacts/
 *.log
 
 # OS specific

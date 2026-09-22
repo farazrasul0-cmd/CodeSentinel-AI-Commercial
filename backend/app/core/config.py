@@ -74,6 +74,14 @@ class Settings(BaseSettings):
     CELERY_PR_QUEUE: str = "pr_lane"
     CELERY_BATCH_QUEUE: str = "batch_lane"
 
+    # S3 / MinIO Object Storage
+    S3_ENDPOINT_URL: str | None = None
+    S3_ACCESS_KEY: str | None = None
+    S3_SECRET_KEY: str | None = None
+    S3_BUCKET_NAME: str = "codesentinel-artifacts"
+    S3_REGION: str = "us-east-1"
+    STORAGE_LOCAL_FALLBACK_DIR: str = "./storage_artifacts"
+
     # Qdrant Vector Store
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6333
