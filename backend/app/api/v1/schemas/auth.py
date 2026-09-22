@@ -1,4 +1,4 @@
-﻿"""Authentication and Multi-Tenant Pydantic Schemas."""
+"""Authentication and Multi-Tenant Pydantic Schemas."""
 
 from datetime import datetime
 from pydantic import BaseModel, Field

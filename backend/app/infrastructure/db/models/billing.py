@@ -1,4 +1,4 @@
-﻿"""Billing, Active Contributor Metering, and Idempotent Webhook Events ORM Models."""
+"""Billing, Active Contributor Metering, and Idempotent Webhook Events ORM Models."""
 
 from datetime import UTC, datetime
 

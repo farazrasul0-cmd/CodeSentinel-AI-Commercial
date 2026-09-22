@@ -1,4 +1,4 @@
-﻿"""Security utilities: SSRF defense, envelope encryption, JWT authentication, and API key hashing."""
+"""Security utilities: SSRF defense, envelope encryption, JWT authentication, and API key hashing."""
 
 import base64
 import hashlib

@@ -1,4 +1,4 @@
-﻿"""Authentication and API Key Endpoints."""
+"""Authentication and API Key Endpoints."""
 
 from typing import Annotated
 

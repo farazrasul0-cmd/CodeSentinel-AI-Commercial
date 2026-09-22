@@ -1,4 +1,4 @@
-﻿"""Commercial Dependency and Supply Chain Vulnerability Auditing Engine."""
+"""Commercial Dependency and Supply Chain Vulnerability Auditing Engine."""
 
 import json
 import re

@@ -1,4 +1,4 @@
-﻿"""Commercial GitHub Webhook Ingestion with In-Place PR Reviews and Quality Gates."""
+"""Commercial GitHub Webhook Ingestion with In-Place PR Reviews and Quality Gates."""
 
 import json
 from typing import Any

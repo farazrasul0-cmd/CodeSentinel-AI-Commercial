@@ -1,4 +1,4 @@
-﻿"""Universal Polyglot AST Parser utilizing precompiled Tree-sitter wheels."""
+"""Universal Polyglot AST Parser utilizing precompiled Tree-sitter wheels."""
 
 import math
 from dataclasses import dataclass, field

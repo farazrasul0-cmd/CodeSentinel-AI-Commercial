@@ -1,4 +1,4 @@
-﻿"""Database models package with Multi-Tenant SaaS models."""
+"""Database models package with Multi-Tenant SaaS models."""
 
 from app.infrastructure.db.models.analysis_job import AnalysisJob
 from app.infrastructure.db.models.analysis_report import AnalysisReport

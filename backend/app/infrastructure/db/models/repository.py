@@ -1,4 +1,4 @@
-﻿"""Repository ORM model with Multi-Tenant Organization scoping."""
+"""Repository ORM model with Multi-Tenant Organization scoping."""
 
 from typing import TYPE_CHECKING, Any
 

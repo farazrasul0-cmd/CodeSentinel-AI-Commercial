@@ -1,4 +1,4 @@
-﻿"""Commercial Secret Scanner with Dual-Layer Regex Signatures and Shannon Entropy Filtering."""
+"""Commercial Secret Scanner with Dual-Layer Regex Signatures and Shannon Entropy Filtering."""
 
 import math
 import re

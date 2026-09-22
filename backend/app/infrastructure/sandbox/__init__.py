@@ -1,4 +1,4 @@
-﻿"""Worker Sandbox and Untrusted Code Isolation Package."""
+"""Worker Sandbox and Untrusted Code Isolation Package."""
 
 from app.infrastructure.sandbox.ephemeral import (
     EphemeralSandbox,

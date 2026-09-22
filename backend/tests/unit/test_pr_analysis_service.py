@@ -1,4 +1,4 @@
-﻿"""Unit tests for diff-targeted PR scanning and 1-click suggestion generation."""
+"""Unit tests for diff-targeted PR scanning and 1-click suggestion generation."""
 
 import pytest
 from app.infrastructure.github.client import MockGitHubPRClient

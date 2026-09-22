@@ -1,4 +1,4 @@
-﻿"""Subscription Tier Entitlement and 30-Day Active Seat Metering Service."""
+"""Subscription Tier Entitlement and 30-Day Active Seat Metering Service."""
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta

@@ -1,4 +1,4 @@
-﻿"""Unit tests for subscription tier entitlements and 30-day seat metering."""
+"""Unit tests for subscription tier entitlements and 30-day seat metering."""
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession

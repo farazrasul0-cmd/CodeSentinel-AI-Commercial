@@ -1,4 +1,4 @@
-﻿"""Production Environment & Configuration Validator for CodeSentinel AI Commercial.
+"""Production Environment & Configuration Validator for CodeSentinel AI Commercial.
 
 Run this script before launching the production Docker container stack to verify
 that all mandatory credentials, cryptographic keys, and settings are present.

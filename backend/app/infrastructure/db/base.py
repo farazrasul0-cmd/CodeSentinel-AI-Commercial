@@ -1,4 +1,4 @@
-﻿"""SQLAlchemy 2.0 Base and Mixins with Multi-Tenant Support."""
+"""SQLAlchemy 2.0 Base and Mixins with Multi-Tenant Support."""
 
 import uuid
 from datetime import UTC, datetime

@@ -76,6 +76,7 @@ class ComplexityVisitor(ast.NodeVisitor):
 
 def analyze_python_source(code_str: str) -> ModuleMetrics:
     """Parses Python source code and computes detailed structural and complexity metrics."""
+    code_str = code_str.lstrip("\ufeff")
     non_empty_lines = [
         line for line in code_str.splitlines() if line.strip() and not line.strip().startswith("#")
     ]

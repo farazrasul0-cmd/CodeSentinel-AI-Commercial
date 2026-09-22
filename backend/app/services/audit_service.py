@@ -1,4 +1,4 @@
-﻿"""Enterprise SOC2 Audit Logging Service.
+"""Enterprise SOC2 Audit Logging Service.
 
 Provides immutable, structured audit logging for security events, authentication,
 RBAC modifications, billing events, and repository quality gate actions.

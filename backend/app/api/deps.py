@@ -1,4 +1,4 @@
-﻿"""FastAPI dependencies for Authentication, Multi-Tenant Resolution, and RBAC."""
+"""FastAPI dependencies for Authentication, Multi-Tenant Resolution, and RBAC."""
 
 import hashlib
 from typing import Annotated

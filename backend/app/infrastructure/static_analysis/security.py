@@ -93,6 +93,11 @@ class SecurityScanner:
     @classmethod
     def _check_sqli(cls, file_path: str, node: ast.Call, issues: list[Issue]) -> None:
         """Detects raw string formatting or f-strings passed into database execute methods."""
+        # Exclude migration DDL schema scripts from SQLi check
+        normalized_path = file_path.replace("\\", "/")
+        if "migrations/" in normalized_path or "alembic" in normalized_path:
+            return
+
         _, func_name = _extract_call_name(node)
         if func_name not in {"execute", "executemany", "raw_sql", "raw"} or not node.args:
             return
@@ -122,6 +127,17 @@ class SecurityScanner:
         cls, file_path: str, node: ast.Assign, issues: list[Issue]
     ) -> None:
         """Detects assignment of literal non-trivial strings to sensitive variable names."""
+        # Suppress unit/integration test files, while preserving intentional vulnerability test fixtures
+        normalized_path = file_path.replace("\\", "/").lower()
+        filename = normalized_path.split("/")[-1]
+        is_test_runner = (
+            (normalized_path.startswith("tests/") or "/tests/" in normalized_path)
+            and (filename.startswith("test_") or filename.endswith("_test.py"))
+            and "/fixtures/" not in normalized_path
+            and not filename.startswith("sec_")
+        )
+        if is_test_runner:
+            return
         is_secret, var_name = _is_hardcoded_secret_assign(node)
         if not is_secret:
             return

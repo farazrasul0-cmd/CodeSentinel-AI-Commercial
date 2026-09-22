@@ -1,4 +1,4 @@
-﻿"""Unit tests for EphemeralSandbox, symlink defense, and git hook neutralization."""
+"""Unit tests for EphemeralSandbox, symlink defense, and git hook neutralization."""
 
 import os
 import tempfile

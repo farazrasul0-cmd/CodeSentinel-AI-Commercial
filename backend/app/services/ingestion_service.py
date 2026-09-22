@@ -130,7 +130,7 @@ class IngestionService:
             for f_path in indexed_files:
                 rel_path = str(f_path.relative_to(clone_path)).replace("\\", "/")
                 try:
-                    content = f_path.read_text(encoding="utf-8", errors="ignore")
+                    content = f_path.read_text(encoding="utf-8-sig", errors="ignore")
                 except Exception:
                     continue
 
@@ -170,7 +170,7 @@ class IngestionService:
             for f_path in target_review_files:
                 rel_path = str(f_path.relative_to(clone_path)).replace("\\", "/")
                 try:
-                    content = f_path.read_text(encoding="utf-8", errors="ignore")
+                    content = f_path.read_text(encoding="utf-8-sig", errors="ignore")
                 except Exception:
                     continue
                 file_issues = [iss for iss in issues if iss.file_path == rel_path]

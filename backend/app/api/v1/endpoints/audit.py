@@ -1,4 +1,4 @@
-﻿"""Commercial SOC2 Audit Log Query and Export Endpoints."""
+"""Commercial SOC2 Audit Log Query and Export Endpoints."""
 
 from typing import Annotated
 

@@ -1,4 +1,4 @@
-﻿# CodeSentinel AI Commercial Architecture Specification
+# CodeSentinel AI Commercial Architecture Specification
 
 ## 1. Executive Summary
 

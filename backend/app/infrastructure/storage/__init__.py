@@ -1,4 +1,4 @@
-﻿"""Object Storage Package for Artifact Offloading."""
+"""Object Storage Package for Artifact Offloading."""
 
 from app.infrastructure.storage.object_storage import (
     ObjectStorageService,

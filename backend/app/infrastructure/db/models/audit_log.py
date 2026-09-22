@@ -1,4 +1,4 @@
-﻿"""Enterprise SOC2 Compliance Audit Log model."""
+"""Enterprise SOC2 Compliance Audit Log model."""
 
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any

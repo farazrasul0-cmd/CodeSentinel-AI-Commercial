@@ -1,4 +1,4 @@
-﻿"""Commercial Health, Liveness, and Readiness Endpoints for Production Deployment."""
+"""Commercial Health, Liveness, and Readiness Endpoints for Production Deployment."""
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text

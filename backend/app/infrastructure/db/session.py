@@ -1,4 +1,4 @@
-﻿"""Database async session and engine setup with PostgreSQL RLS support."""
+"""Database async session and engine setup with PostgreSQL RLS support."""
 
 from collections.abc import AsyncGenerator
 

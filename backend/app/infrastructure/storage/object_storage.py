@@ -1,4 +1,4 @@
-﻿"""Commercial Object Storage Service (AWS S3, MinIO, and Local Fallback)."""
+"""Commercial Object Storage Service (AWS S3, MinIO, and Local Fallback)."""
 
 import hashlib
 from pathlib import Path

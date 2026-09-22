@@ -1,4 +1,4 @@
-﻿"""Integration tests for Healthcheck, Liveness, and SOC2 Audit Logging APIs."""
+"""Integration tests for Healthcheck, Liveness, and SOC2 Audit Logging APIs."""
 
 import pytest
 from httpx import AsyncClient

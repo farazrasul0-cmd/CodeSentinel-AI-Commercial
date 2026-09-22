@@ -1,4 +1,4 @@
-﻿"""API Key model for programmatic CI/CD and CLI integrations."""
+"""API Key model for programmatic CI/CD and CLI integrations."""
 
 from datetime import datetime
 from typing import TYPE_CHECKING, Any

@@ -1,4 +1,4 @@
-﻿"""Unit tests for AuthService provisioning and API key lifecycle."""
+"""Unit tests for AuthService provisioning and API key lifecycle."""
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession

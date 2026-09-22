@@ -1,4 +1,4 @@
-﻿"""Commercial Diff-Targeted Pull Request Analysis Engine."""
+"""Commercial Diff-Targeted Pull Request Analysis Engine."""
 
 import textwrap
 from dataclasses import dataclass, field

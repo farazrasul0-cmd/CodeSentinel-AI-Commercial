@@ -1,4 +1,4 @@
-﻿"""Unit tests for Celery task pool isolation, queue routing, and retry policies."""
+"""Unit tests for Celery task pool isolation, queue routing, and retry policies."""
 
 from app.workers.celery_app import (
     analyze_repository_task,

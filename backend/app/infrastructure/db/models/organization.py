@@ -1,4 +1,4 @@
-﻿"""Organization multi-tenant ORM model."""
+"""Organization multi-tenant ORM model."""
 
 from typing import TYPE_CHECKING
 

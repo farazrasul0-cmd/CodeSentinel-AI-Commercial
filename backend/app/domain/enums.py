@@ -1,4 +1,4 @@
-﻿"""Domain enums for analysis status, finding severities, risk tiers, and multi-tenant RBAC."""
+"""Domain enums for analysis status, finding severities, risk tiers, and multi-tenant RBAC."""
 
 import enum
 

@@ -1,4 +1,4 @@
-﻿"""Unit tests for GitHub App authentication and ephemeral token caching."""
+"""Unit tests for GitHub App authentication and ephemeral token caching."""
 
 import pytest
 from app.infrastructure.github.app_auth import GitHubAppAuthManager

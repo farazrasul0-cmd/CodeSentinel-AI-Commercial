@@ -1,4 +1,4 @@
-﻿"""User ORM model."""
+"""User ORM model."""
 
 from typing import TYPE_CHECKING
 

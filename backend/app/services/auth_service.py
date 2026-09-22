@@ -1,4 +1,4 @@
-﻿"""Commercial Authentication and Multi-Tenant Provisioning Service."""
+"""Commercial Authentication and Multi-Tenant Provisioning Service."""
 
 import re
 from datetime import UTC, datetime, timedelta

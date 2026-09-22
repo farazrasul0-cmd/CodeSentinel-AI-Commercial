@@ -1,4 +1,4 @@
-﻿"""GitHub App Authentication and Dynamic Ephemeral Installation Token Manager."""
+"""GitHub App Authentication and Dynamic Ephemeral Installation Token Manager."""
 
 import time
 from typing import Any

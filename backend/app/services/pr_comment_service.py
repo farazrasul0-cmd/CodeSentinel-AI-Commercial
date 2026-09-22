@@ -1,4 +1,4 @@
-﻿"""Pull Request Comment Formatting and Review Orchestration Service."""
+"""Pull Request Comment Formatting and Review Orchestration Service."""
 
 from typing import Any
 

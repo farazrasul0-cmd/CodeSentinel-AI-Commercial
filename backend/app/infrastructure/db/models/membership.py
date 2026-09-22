@@ -1,4 +1,4 @@
-﻿"""Membership association model linking Users to Organizations with RBAC Roles."""
+"""Membership association model linking Users to Organizations with RBAC Roles."""
 
 from typing import TYPE_CHECKING
 

@@ -1,4 +1,4 @@
-﻿"""Polyglot AST Parsers Package."""
+"""Polyglot AST Parsers Package."""
 
 from app.infrastructure.parsers.polyglot import (
     FunctionBoundary,

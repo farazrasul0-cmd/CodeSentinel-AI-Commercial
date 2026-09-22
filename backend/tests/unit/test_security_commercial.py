@@ -1,4 +1,4 @@
-﻿"""Unit tests for commercial security, envelope encryption, and JWT authentication."""
+"""Unit tests for commercial security, envelope encryption, and JWT authentication."""
 
 import pytest
 from app.core.security import (

@@ -1,4 +1,4 @@
-﻿"""Commercial Stripe Billing and Webhook Endpoints."""
+"""Commercial Stripe Billing and Webhook Endpoints."""
 
 import json
 from typing import Annotated, Any

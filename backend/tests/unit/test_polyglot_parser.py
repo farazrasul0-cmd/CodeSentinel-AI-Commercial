@@ -1,4 +1,4 @@
-﻿"""Unit tests for universal PolyglotParser across Python, TS/JS, Go, Java, and Rust."""
+"""Unit tests for universal PolyglotParser across Python, TS/JS, Go, Java, and Rust."""
 
 import pytest
 from app.infrastructure.parsers.polyglot import PolyglotParser, SupportedLanguage

@@ -1,4 +1,4 @@
-﻿"""Integration tests for Multi-Tenancy, Authentication, and RBAC endpoints."""
+"""Integration tests for Multi-Tenancy, Authentication, and RBAC endpoints."""
 
 import pytest
 from httpx import AsyncClient

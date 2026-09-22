@@ -1,4 +1,4 @@
-﻿"""Integration tests for GitHub PR review bot, in-place summary comments, and Check Runs."""
+"""Integration tests for GitHub PR review bot, in-place summary comments, and Check Runs."""
 
 import hashlib
 import hmac

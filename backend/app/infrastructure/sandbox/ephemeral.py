@@ -1,4 +1,4 @@
-﻿"""Ephemeral Worker Sandbox for Untrusted Code Isolation."""
+"""Ephemeral Worker Sandbox for Untrusted Code Isolation."""
 
 import os
 import shutil

@@ -1,4 +1,4 @@
-﻿"""Unit tests for Stripe BillingService and idempotent webhook event processing."""
+"""Unit tests for Stripe BillingService and idempotent webhook event processing."""
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession

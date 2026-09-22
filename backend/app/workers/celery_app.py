@@ -1,4 +1,4 @@
-﻿"""Celery Application Configuration with Dual-Lane Workers and Exponential Backoff."""
+"""Celery Application Configuration with Dual-Lane Workers and Exponential Backoff."""
 
 import asyncio
 

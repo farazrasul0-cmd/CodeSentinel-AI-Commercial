@@ -1,4 +1,4 @@
-﻿"""Unit tests for DependencyAuditService supply chain vulnerability scanning."""
+"""Unit tests for DependencyAuditService supply chain vulnerability scanning."""
 
 from app.domain.enums import FindingSeverity
 from app.services.dependency_audit_service import DependencyAuditService

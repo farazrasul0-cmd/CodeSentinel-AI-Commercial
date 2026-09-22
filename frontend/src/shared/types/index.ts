@@ -1,4 +1,4 @@
-﻿export type JobStatus =
+export type JobStatus =
   | "QUEUED"
   | "CLONING"
   | "INDEXING"

@@ -1,4 +1,4 @@
-﻿"""Stripe Commercial Billing Service with Strict Webhook Idempotency."""
+"""Stripe Commercial Billing Service with Strict Webhook Idempotency."""
 
 from typing import Any
 import stripe

@@ -30,6 +30,8 @@ class StaticAnalysisEngine:
 
     @classmethod
     def analyze_python_file(cls, file_path: str, code_str: str) -> FileAnalysisResult:
+        # Strip UTF-8 BOM if present
+        code_str = code_str.lstrip("\ufeff")
         # 1. Parse AST
         try:
             tree = ast.parse(code_str)

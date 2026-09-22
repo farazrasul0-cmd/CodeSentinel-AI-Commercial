@@ -1,4 +1,4 @@
-﻿"""Integration tests for Commercial Stripe Billing and Entitlement APIs."""
+"""Integration tests for Commercial Stripe Billing and Entitlement APIs."""
 
 import json
 from unittest.mock import AsyncMock, patch

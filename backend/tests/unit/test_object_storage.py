@@ -1,4 +1,4 @@
-﻿"""Unit tests for Object Storage artifact offloading and local fallback."""
+"""Unit tests for Object Storage artifact offloading and local fallback."""
 
 import hashlib
 import tempfile

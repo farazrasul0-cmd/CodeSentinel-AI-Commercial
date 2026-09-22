@@ -1,4 +1,4 @@
-﻿"""Unit tests for commercial SecretScanner pattern detection and false-positive filtering."""
+"""Unit tests for commercial SecretScanner pattern detection and false-positive filtering."""
 
 from app.domain.enums import FindingSeverity
 from app.services.secret_scanner import SecretScanner, calculate_shannon_entropy

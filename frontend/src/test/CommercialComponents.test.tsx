@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   MOCK_BILLING_DETAILS,
   MOCK_CONNECTED_REPOS,

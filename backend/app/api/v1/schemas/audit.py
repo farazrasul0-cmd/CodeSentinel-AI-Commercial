@@ -1,4 +1,4 @@
-﻿"""Pydantic schemas for SOC2 Audit Logging API."""
+"""Pydantic schemas for SOC2 Audit Logging API."""
 
 from datetime import datetime
 from typing import Any
