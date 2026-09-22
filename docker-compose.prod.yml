@@ -1,0 +1,148 @@
+﻿version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: codesentinel-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-codesentinel_commercial}
+      POSTGRES_USER: ${POSTGRES_USER:-codesentinel_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secure_commercial_pass_2026}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-codesentinel_user} -d ${POSTGRES_DB:-codesentinel_commercial}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - codesentinel-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: codesentinel-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-secure_redis_pass_2026}"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-secure_redis_pass_2026}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - codesentinel-net
+
+  minio:
+    image: minio/minio:RELEASE.2024-03-30T09-41-56Z
+    container_name: codesentinel-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-codesentinel_minio_admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-secure_minio_pass_2026}
+    volumes:
+      - minio_data:/data
+    networks:
+      - codesentinel-net
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    container_name: codesentinel-backend
+    restart: unless-stopped
+    command: ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "app.main:app", "--bind", "0.0.0.0:8000"]
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-codesentinel_user}:${POSTGRES_PASSWORD:-secure_commercial_pass_2026}@postgres:5432/${POSTGRES_DB:-codesentinel_commercial}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-secure_redis_pass_2026}@redis:6379/0
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-secure_redis_pass_2026}@redis:6379/1
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-secure_redis_pass_2026}@redis:6379/2
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-codesentinel_minio_admin}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-secure_minio_pass_2026}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME:-codesentinel-artifacts}
+      FERNET_MASTER_KEY: ${FERNET_MASTER_KEY:-}
+      JWT_SECRET: ${JWT_SECRET:-}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
+      GITHUB_APP_WEBHOOK_SECRET: ${GITHUB_APP_WEBHOOK_SECRET:-}
+      STRIPE_API_KEY: ${STRIPE_API_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/v1/health/live || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - codesentinel-net
+
+  celery-pr-worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    container_name: codesentinel-celery-pr-lane
+    restart: unless-stopped
+    command: ["celery", "-A", "app.workers.celery_app.celery_app", "worker", "-Q", "pr_lane", "-c", "4", "--loglevel=info", "-n", "pr_worker@%h"]
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-codesentinel_user}:${POSTGRES_PASSWORD:-secure_commercial_pass_2026}@postgres:5432/${POSTGRES_DB:-codesentinel_commercial}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-secure_redis_pass_2026}@redis:6379/0
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-secure_redis_pass_2026}@redis:6379/1
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-secure_redis_pass_2026}@redis:6379/2
+      FERNET_MASTER_KEY: ${FERNET_MASTER_KEY:-}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - codesentinel-net
+
+  celery-batch-worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    container_name: codesentinel-celery-batch-lane
+    restart: unless-stopped
+    command: ["celery", "-A", "app.workers.celery_app.celery_app", "worker", "-Q", "batch_lane", "-c", "2", "--loglevel=info", "-n", "batch_worker@%h"]
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-codesentinel_user}:${POSTGRES_PASSWORD:-secure_commercial_pass_2026}@postgres:5432/${POSTGRES_DB:-codesentinel_commercial}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-secure_redis_pass_2026}@redis:6379/0
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-secure_redis_pass_2026}@redis:6379/1
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-secure_redis_pass_2026}@redis:6379/2
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - codesentinel-net
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    container_name: codesentinel-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - codesentinel-net
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+
+networks:
+  codesentinel-net:
+    driver: bridge

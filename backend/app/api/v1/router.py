@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
     analysis,
+    audit,
     auth,
     benchmarks,
     billing,
@@ -21,6 +22,7 @@ api_router = APIRouter()
 
 api_router.include_router(health.router)
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
+api_router.include_router(audit.router)
 api_router.include_router(billing.router)
 api_router.include_router(repositories.router)
 api_router.include_router(analysis.router)
