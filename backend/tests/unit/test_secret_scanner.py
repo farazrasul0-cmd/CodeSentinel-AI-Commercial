@@ -51,3 +51,37 @@ md5_hash = "5d41402abc4b2a76b9719d911017c592"
     test_code_with_token = "AWS_KEY = 'AKIA0123456789ABCDEF'"
     test_findings = SecretScanner.scan_file("tests/unit/test_app.py", test_code_with_token)
     assert len(test_findings) == 0
+
+def test_openai_api_key_detection():
+    """Confirms OpenAI sk- token signatures are detected."""
+    fake_token = "sk-" + ("a1b2c3d4e5f6g7h8i9j0" * 3)[:48]
+    code = f"OPENAI_API_KEY = '{fake_token}'"
+    findings = SecretScanner.scan_file("src/ai_agent.py", code)
+    assert len(findings) == 1
+    assert findings[0].secret_type == "OPENAI-API-KEY"
+    assert findings[0].line_number == 1
+    assert not findings[0].masked_value.startswith(fake_token)
+
+
+def test_entropy_threshold_behavior():
+    """Confirms low-entropy strings are ignored while high-entropy candidates are flagged."""
+    low_entropy = "1111222233334444"
+    assert calculate_shannon_entropy(low_entropy) < 2.5
+
+    high_entropy_token = "K9#xL2$vM8!qP4*zW1&y"
+    assert calculate_shannon_entropy(high_entropy_token) > 3.8
+
+
+def test_secret_finding_attributes():
+    """Verifies SecretFinding entity structure and attributes."""
+    findings = SecretScanner.scan_file(
+        "config/creds.py",
+        "AWS_SECRET = 'AKIA0123456789ABCDEF'",
+    )
+    assert len(findings) == 1
+    finding = findings[0]
+    assert finding.secret_type == "AWS-ACCESS-KEY"
+    assert finding.file_path == "config/creds.py"
+    assert finding.line_number == 1
+    assert finding.severity == FindingSeverity.CRITICAL
+    assert finding.entropy > 2.5

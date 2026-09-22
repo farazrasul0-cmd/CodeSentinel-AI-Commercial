@@ -76,50 +76,45 @@ class FileIndexer:
         except Exception:
             return False
 
-    @classmethod
-    def walk_repository(cls, repo_root: Path) -> Generator[Path, None, None]:
-        """Walks repository and yields only analyzable source files respecting ignore rules."""
-        import fnmatch
-
-        ignore_patterns: list[str] = []
+    @staticmethod
+    def _load_ignore_patterns(repo_root: Path) -> list[str]:
+        """Parses patterns from .codesentinelignore file if present."""
+        patterns: list[str] = []
         ignore_file = repo_root / ".codesentinelignore"
         if ignore_file.exists() and ignore_file.is_file():
             try:
                 for line in ignore_file.read_text(encoding="utf-8", errors="ignore").splitlines():
                     cleaned = line.strip()
                     if cleaned and not cleaned.startswith("#"):
-                        # Normalize glob pattern
-                        if cleaned.endswith("/"):
-                            cleaned = cleaned[:-1]
-                        ignore_patterns.append(cleaned)
+                        patterns.append(cleaned[:-1] if cleaned.endswith("/") else cleaned)
             except Exception:
                 pass
+        return patterns
 
+    @classmethod
+    def _is_path_ignored(cls, path: Path, repo_root: Path, patterns: list[str]) -> bool:
+        """Determines if a path matches standard directory exclusions or custom ignore globs."""
+        import fnmatch
+        rel_parts = path.relative_to(repo_root).parts
+        if any(part in IGNORED_DIRS for part in rel_parts[:-1]):
+            return True
+
+        rel_str = "/".join(rel_parts)
+        for pat in patterns:
+            if (
+                fnmatch.fnmatch(rel_str, pat)
+                or fnmatch.fnmatch(rel_str, f"{pat}/*")
+                or any(fnmatch.fnmatch(part, pat) for part in rel_parts[:-1])
+            ):
+                return True
+        return False
+
+    @classmethod
+    def walk_repository(cls, repo_root: Path) -> Generator[Path, None, None]:
+        """Walks repository and yields only analyzable source files respecting ignore rules."""
+        patterns = cls._load_ignore_patterns(repo_root)
         for path in repo_root.rglob("*"):
-            if not path.is_file():
-                continue
-
-            rel_parts = path.relative_to(repo_root).parts
-            # Check if any parent directory is in IGNORED_DIRS
-            if any(part in IGNORED_DIRS for part in rel_parts[:-1]):
-                continue
-
-            rel_str = "/".join(rel_parts)
-            # Match against .codesentinelignore patterns
-            ignored_by_rule = False
-            for pat in ignore_patterns:
-                if (
-                    fnmatch.fnmatch(rel_str, pat)
-                    or fnmatch.fnmatch(rel_str, f"{pat}/*")
-                    or any(fnmatch.fnmatch(part, pat) for part in rel_parts[:-1])
-                ):
-                    ignored_by_rule = True
-                    break
-
-            if ignored_by_rule:
-                continue
-
-            if cls.is_text_source_file(path):
+            if path.is_file() and not cls._is_path_ignored(path, repo_root, patterns) and cls.is_text_source_file(path):
                 yield path
 
     @classmethod

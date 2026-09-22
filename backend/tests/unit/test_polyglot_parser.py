@@ -119,3 +119,17 @@ def test_unknown_language_fallback():
     metrics = PolyglotParser.parse_code("data.xyz", code)
     assert metrics.language == "unknown"
     assert metrics.cyclomatic_complexity == 1
+
+def test_polyglot_parse_empty_content():
+    """Verifies safe handling of empty source code files."""
+    metric = PolyglotParser.parse_code("empty.js", "")
+    assert metric.sloc == 0
+    assert metric.cyclomatic_complexity == 1
+    assert len(metric.functions) == 0
+
+
+def test_polyglot_unsupported_language_fallback():
+    """Verifies fallback heuristics when an unsupported language is parsed."""
+    code = 'fn main() { println!("hello"); }'
+    metric = PolyglotParser.parse_code("script.xyz", code)
+    assert metric.language == "unknown"

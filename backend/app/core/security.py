@@ -35,42 +35,38 @@ BLOCKED_NETWORKS = [
 # ============================================================================
 
 
-def is_safe_repository_url(url: str) -> tuple[bool, str]:
-    """Validates that a Git repository URL does not target internal subnets or local resources (SSRF defense)."""
-    if not url or not isinstance(url, str):
-        return False, "URL must be a non-empty string"
+def _is_dev_local_path(url: str) -> bool:
+    """Checks whether URL refers to a permissible local development directory."""
+    if settings.APP_ENV not in {"development", "testing"} and not settings.DEBUG:
+        return False
+    if not (url.startswith("file://") or (len(url) > 2 and Path(url).exists())):
+        return False
+    raw_path = url[7:] if url.startswith("file://") else url
+    try:
+        local_path = Path(raw_path).expanduser().resolve()
+        return local_path.exists() and local_path.is_dir()
+    except Exception:
+        return False
 
-    url = url.strip()
 
-    # Allow local directories in development/testing mode for standalone execution
-    if (settings.APP_ENV in {"development", "testing"} or settings.DEBUG) and (
-        url.startswith("file://") or (len(url) > 2 and Path(url).exists())
-    ):
-        raw_path = url[7:] if url.startswith("file://") else url
-        try:
-            local_path = Path(raw_path).expanduser().resolve()
-            if local_path.exists() and local_path.is_dir():
-                return True, "Safe local development directory"
-        except Exception:
-            pass
-
-    # Regex check for typical git/https URLs
-    if not (url.startswith("https://") or url.startswith("http://") or url.startswith("git@")):
-        return False, "URL must use https:// or git@"
-
+def _extract_git_hostname(url: str) -> tuple[str | None, str | None]:
+    """Extracts hostname from HTTPS or SSH git URL."""
     if url.startswith("git@"):
         match = re.match(r"^git@([a-zA-Z0-9.-]+):([\w.-]+)/([\w.-]+)(\.git)?$", url)
         if not match:
-            return False, "Invalid SSH git URL format"
-        hostname = match.group(1)
-    else:
-        parsed = urlparse(url)
-        if parsed.scheme.lower() not in ALLOWED_SCHEMES:
-            return False, f"Unsupported scheme: {parsed.scheme}"
-        hostname = parsed.hostname
-        if not hostname:
-            return False, "URL does not contain a valid hostname"
+            return None, "Invalid SSH git URL format"
+        return match.group(1), None
 
+    parsed = urlparse(url)
+    if parsed.scheme.lower() not in ALLOWED_SCHEMES:
+        return None, f"Unsupported scheme: {parsed.scheme}"
+    if not parsed.hostname:
+        return None, "URL does not contain a valid hostname"
+    return parsed.hostname, None
+
+
+def _check_ip_safety(hostname: str) -> tuple[bool, str]:
+    """Verifies that resolved IP address does not target private or internal networks."""
     if hostname.lower() in {"localhost", "127.0.0.1", "::1", "0.0.0.0"}:
         return False, "Access to localhost/loopback addresses is forbidden"
 
@@ -88,6 +84,26 @@ def is_safe_repository_url(url: str) -> tuple[bool, str]:
         return False, f"Failed to resolve hostname: {hostname}"
 
     return True, "URL is safe"
+
+
+def is_safe_repository_url(url: str) -> tuple[bool, str]:
+    """Validates that a Git repository URL does not target internal subnets or local resources (SSRF defense)."""
+    if not url or not isinstance(url, str):
+        return False, "URL must be a non-empty string"
+
+    url = url.strip()
+
+    if _is_dev_local_path(url):
+        return True, "Safe local development directory"
+
+    if not (url.startswith("https://") or url.startswith("http://") or url.startswith("git@")):
+        return False, "URL must use https:// or git@"
+
+    hostname, err = _extract_git_hostname(url)
+    if err or not hostname:
+        return False, err or "Invalid git URL format"
+
+    return _check_ip_safety(hostname)
 
 
 # ============================================================================

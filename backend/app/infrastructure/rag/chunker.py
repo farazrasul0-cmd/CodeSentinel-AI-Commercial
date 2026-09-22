@@ -87,6 +87,13 @@ def _extract_typescript_imports(lines: list[str]) -> list[str]:
     return imported_symbols
 
 
+def _is_statement_end(char: str, found_open: bool, kind: str) -> bool:
+    """Checks for semicolon termination in variable declarations."""
+    if found_open:
+        return False
+    return char == ";" and kind in ("const", "let", "var")
+
+
 def _find_ts_block_end(
     content: str,
     search_start: int,
@@ -107,13 +114,34 @@ def _find_ts_block_end(
             brace_count -= 1
             if found_open and brace_count == 0:
                 return idx + 1
-        elif char == ";" and not found_open and kind in ("const", "let", "var"):
+        elif _is_statement_end(char, found_open, kind):
             return idx + 1
 
     if not found_open and next_match_start is not None:
         return next_match_start
 
     return content_len
+
+
+@dataclass
+class AstExtractionContext:
+    """Carries contextual metadata and output chunk list during AST traversal."""
+
+    file_path: str
+    lines: list[str]
+    imported_symbols: list[str]
+    chunks: list[CodeChunk]
+
+
+@dataclass
+class TsChunkContext:
+    """Carries contextual source data during TypeScript chunk extraction."""
+
+    file_path: str
+    content: str
+    lines: list[str]
+    imported_symbols: list[str]
+
 
 
 class PythonSemanticChunker:
@@ -133,13 +161,18 @@ class PythonSemanticChunker:
         imported_symbols = _extract_python_imports(tree)
         chunks: list[CodeChunk] = []
 
+        ctx = AstExtractionContext(
+            file_path=file_path,
+            lines=lines,
+            imported_symbols=imported_symbols,
+            chunks=chunks,
+        )
+
         for node in tree.body:
             if isinstance(node, ast.ClassDef):
-                cls._extract_class(node, file_path, lines, imported_symbols, chunks)
+                cls._extract_class(node, ctx)
             elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                cls._extract_function(
-                    node, file_path, lines, imported_symbols, chunks, parent_scope=[]
-                )
+                cls._extract_function(node, ctx, parent_scope=[])
 
         if not chunks and content.strip():
             chunks.append(cls._create_module_chunk(file_path, content, total_lines, imported_symbols))
@@ -171,19 +204,16 @@ class PythonSemanticChunker:
     def _extract_class(
         cls,
         node: ast.ClassDef,
-        file_path: str,
-        lines: list[str],
-        imported_symbols: list[str],
-        chunks: list[CodeChunk],
+        ctx: AstExtractionContext,
     ) -> None:
         start_line = node.lineno
         end_line = getattr(node, "end_lineno", start_line)
-        content = "".join(lines[start_line - 1 : end_line])
+        content = "".join(ctx.lines[start_line - 1 : end_line])
 
-        chunks.append(
+        ctx.chunks.append(
             CodeChunk(
-                chunk_id=generate_chunk_id(file_path, node.name, start_line, end_line),
-                file_path=file_path,
+                chunk_id=generate_chunk_id(ctx.file_path, node.name, start_line, end_line),
+                file_path=ctx.file_path,
                 language="python",
                 symbol_name=node.name,
                 symbol_type="CLASS",
@@ -192,7 +222,7 @@ class PythonSemanticChunker:
                 end_line=end_line,
                 content=content,
                 docstring=ast.get_docstring(node),
-                imported_symbols=imported_symbols,
+                imported_symbols=ctx.imported_symbols,
             )
         )
 
@@ -200,10 +230,7 @@ class PythonSemanticChunker:
             if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 cls._extract_function(
                     item,
-                    file_path,
-                    lines,
-                    imported_symbols,
-                    chunks,
+                    ctx,
                     parent_scope=[node.name],
                 )
 
@@ -211,35 +238,33 @@ class PythonSemanticChunker:
     def _extract_function(
         cls,
         node: ast.FunctionDef | ast.AsyncFunctionDef,
-        file_path: str,
-        lines: list[str],
-        imported_symbols: list[str],
-        chunks: list[CodeChunk],
-        parent_scope: list[str],
+        ctx: AstExtractionContext,
+        parent_scope: list[str] | None = None,
     ) -> None:
+        scope = parent_scope or []
         start_line = node.lineno
         end_line = getattr(node, "end_lineno", start_line)
-        content = "".join(lines[start_line - 1 : end_line])
+        content = "".join(ctx.lines[start_line - 1 : end_line])
         params, ret_type = _extract_function_signature(node)
 
-        symbol_name = f"{parent_scope[0]}.{node.name}" if parent_scope else node.name
-        symbol_type = "METHOD" if parent_scope else "FUNCTION"
+        symbol_name = f"{scope[0]}.{node.name}" if scope else node.name
+        symbol_type = "METHOD" if scope else "FUNCTION"
 
-        chunks.append(
+        ctx.chunks.append(
             CodeChunk(
-                chunk_id=generate_chunk_id(file_path, symbol_name, start_line, end_line),
-                file_path=file_path,
+                chunk_id=generate_chunk_id(ctx.file_path, symbol_name, start_line, end_line),
+                file_path=ctx.file_path,
                 language="python",
                 symbol_name=symbol_name,
                 symbol_type=symbol_type,
-                scope_path=parent_scope + [node.name],
+                scope_path=scope + [node.name],
                 start_line=start_line,
                 end_line=end_line,
                 content=content,
                 docstring=ast.get_docstring(node),
                 parameters=params,
                 return_type=ret_type,
-                imported_symbols=imported_symbols,
+                imported_symbols=ctx.imported_symbols,
             )
         )
 
@@ -253,6 +278,34 @@ class TypeScriptSemanticChunker:
     )
 
     @classmethod
+    def _create_match_chunk(
+        cls,
+        ctx: TsChunkContext,
+        match: re.Match,
+        next_start: int | None,
+    ) -> CodeChunk:
+        """Constructs an individual TypeScript AST chunk from a regex match."""
+        kind, name = match.group(1), match.group(2)
+        start_line = ctx.content[: match.start()].count("\n") + 1
+        end_char = _find_ts_block_end(ctx.content, match.end(), kind, next_start)
+        end_line = ctx.content[:end_char].count("\n") + 1
+        chunk_content = "".join(ctx.lines[start_line - 1 : end_line])
+        symbol_type = "CLASS" if kind == "class" else ("INTERFACE" if kind == "interface" else "FUNCTION")
+
+        return CodeChunk(
+            chunk_id=generate_chunk_id(ctx.file_path, name, start_line, end_line),
+            file_path=ctx.file_path,
+            language="typescript",
+            symbol_name=name,
+            symbol_type=symbol_type,
+            scope_path=[name],
+            start_line=start_line,
+            end_line=end_line,
+            content=chunk_content,
+            imported_symbols=ctx.imported_symbols,
+        )
+
+    @classmethod
     def chunk(cls, file_path: str, content: str) -> list[CodeChunk]:
         """Extracts top-level classes, interfaces, and functions using balanced block traversal."""
         lines = content.splitlines(keepends=True)
@@ -264,30 +317,16 @@ class TypeScriptSemanticChunker:
         matches = list(cls.DECLARATION_PATTERN.finditer(content))
         chunks: list[CodeChunk] = []
 
+        ts_ctx = TsChunkContext(
+            file_path=file_path,
+            content=content,
+            lines=lines,
+            imported_symbols=imported_symbols,
+        )
         for idx, match in enumerate(matches):
-            kind, name = match.group(1), match.group(2)
-            start_line = content[: match.start()].count("\n") + 1
             next_start = matches[idx + 1].start() if idx + 1 < len(matches) else None
-
-            end_char = _find_ts_block_end(content, match.end(), kind, next_start)
-            end_line = content[:end_char].count("\n") + 1
-            chunk_content = "".join(lines[start_line - 1 : end_line])
-
-            symbol_type = "CLASS" if kind == "class" else ("INTERFACE" if kind == "interface" else "FUNCTION")
-
             chunks.append(
-                CodeChunk(
-                    chunk_id=generate_chunk_id(file_path, name, start_line, end_line),
-                    file_path=file_path,
-                    language="typescript",
-                    symbol_name=name,
-                    symbol_type=symbol_type,
-                    scope_path=[name],
-                    start_line=start_line,
-                    end_line=end_line,
-                    content=chunk_content,
-                    imported_symbols=imported_symbols,
-                )
+                cls._create_match_chunk(ts_ctx, match, next_start)
             )
 
         if not chunks and content.strip():

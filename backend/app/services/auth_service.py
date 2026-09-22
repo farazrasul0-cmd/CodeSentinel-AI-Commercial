@@ -1,7 +1,7 @@
 """Commercial Authentication and Multi-Tenant Provisioning Service."""
 
 import re
-from datetime import UTC, datetime, timedelta
+from typing import Any
 import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +22,92 @@ from app.infrastructure.db.models.organization import Organization
 from app.infrastructure.db.models.user import User
 
 
+async def _fetch_github_email(client: httpx.AsyncClient, token: str, initial: str | None) -> str | None:
+    """Retrieves verified primary email from GitHub API if omitted from public profile."""
+    if initial:
+        return initial
+    try:
+        res = await client.get(
+            "https://api.github.com/user/emails",
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+            timeout=10.0,
+        )
+        if res.status_code == 200:
+            for em in res.json():
+                if em.get("primary") and em.get("verified"):
+                    return em.get("email")
+    except Exception:
+        pass
+    return None
+
+
+async def _create_default_org(session: AsyncSession, user_id: str, login: str) -> Organization:
+    """Provisions a default personal workspace organization and owner membership."""
+    clean_slug = re.sub(r"[^a-zA-Z0-9-]", "-", login.lower()).strip("-")
+    org = Organization(
+        name=f"{login}'s Workspace",
+        slug=f"{clean_slug}-workspace",
+        plan=OrgPlan.FREE,
+        is_active=True,
+    )
+    session.add(org)
+    await session.flush()
+
+    membership = Membership(
+        user_id=user_id,
+        organization_id=org.id,
+        role=UserRole.OWNER,
+        is_active=True,
+    )
+    session.add(membership)
+    await session.flush()
+    return org
+
+
+async def _upsert_user(
+    session: AsyncSession,
+    data: dict[str, Any],
+    enc_token: str | None,
+) -> tuple[User, Organization]:
+    """Persists new user or updates existing profile, guaranteeing workspace membership."""
+    github_id = data.get("github_id")
+    email = data.get("email")
+    login = data.get("login", "user")
+
+    stmt = (
+        select(User)
+        .where((User.github_id == github_id) | (User.email == email))
+        .options(selectinload(User.memberships).selectinload(Membership.organization))
+    )
+    res = await session.execute(stmt)
+    user = res.scalar_one_or_none()
+
+    if not user:
+        user = User(
+            email=email,
+            username=login,
+            full_name=data.get("name"),
+            avatar_url=data.get("avatar_url"),
+            github_id=github_id,
+            github_username=login,
+            encrypted_github_token=enc_token,
+            is_active=True,
+        )
+        session.add(user)
+        await session.flush()
+        org = await _create_default_org(session, user.id, login)
+    else:
+        user.github_username = login
+        user.avatar_url = data.get("avatar_url")
+        if enc_token:
+            user.encrypted_github_token = enc_token
+        if not user.memberships:
+            org = await _create_default_org(session, user.id, login)
+        else:
+            org = user.memberships[0].organization
+    return user, org
+
+
 class AuthService:
     """Handles GitHub SSO, token lifecycle, team provisioning, and API keys."""
 
@@ -30,14 +116,17 @@ class AuthService:
         """Generates GitHub OAuth authorization URL."""
         client_id = settings.GITHUB_CLIENT_ID or "mock-client-id"
         redirect_uri = settings.GITHUB_OAUTH_REDIRECT_URI
-        scope = "read:user,user:email,repo"
-        url = f"https://github.com/login/oauth/authorize?client_id={client_id}&redirect_uri={redirect_uri}&scope={scope}"
+        scope = "read:user user:email repo"
+        url = (
+            f"https://github.com/login/oauth/authorize"
+            f"?client_id={client_id}&redirect_uri={redirect_uri}&scope={scope}"
+        )
         if state:
             url += f"&state={state}"
         return url
 
-    @staticmethod
-    async def exchange_github_code(code: str) -> dict:
+    @classmethod
+    async def exchange_github_code(cls, code: str) -> dict[str, Any]:
         """Exchanges authorization code for GitHub access token and profile info."""
         if not settings.GITHUB_CLIENT_ID or settings.GITHUB_CLIENT_ID == "mock-client-id":
             return {
@@ -64,128 +153,42 @@ class AuthService:
             token_json = token_res.json()
             access_token = token_json.get("access_token")
             if not access_token:
-                raise ValueError(f"Failed to exchange code: {token_json.get('error_description', 'Unknown error')}")
+                raise ValueError(
+                    f"Failed to exchange code: {token_json.get('error_description', 'Unknown error')}"
+                )
 
             user_res = await client.get(
                 "https://api.github.com/user",
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Accept": "application/json",
-                },
+                headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
                 timeout=10.0,
             )
             profile = user_res.json()
-
-            email = profile.get("email")
-            if not email:
-                emails_res = await client.get(
-                    "https://api.github.com/user/emails",
-                    headers={
-                        "Authorization": f"Bearer {access_token}",
-                        "Accept": "application/json",
-                    },
-                    timeout=10.0,
-                )
-                if emails_res.status_code == 200:
-                    for em in emails_res.json():
-                        if em.get("primary") and em.get("verified"):
-                            email = em.get("email")
-                            break
+            login = profile.get("login")
+            email = await _fetch_github_email(client, access_token, profile.get("email"))
 
             return {
                 "github_id": profile.get("id"),
-                "login": profile.get("login"),
-                "email": email or f"{profile.get('login')}@users.noreply.github.com",
-                "name": profile.get("name") or profile.get("login"),
+                "login": login,
+                "email": email or f"{login}@users.noreply.github.com",
+                "name": profile.get("name") or login,
                 "avatar_url": profile.get("avatar_url"),
                 "access_token": access_token,
             }
 
-    @staticmethod
+    @classmethod
     async def authenticate_or_provision_user(
+        cls,
         session: AsyncSession,
-        github_data: dict,
+        github_data: dict[str, Any],
     ) -> tuple[User, Organization, str, str]:
         """Provisions or updates a user from GitHub data and returns JWT tokens."""
-        github_id = github_data.get("github_id")
-        email = github_data.get("email")
-        login = github_data.get("login")
-        name = github_data.get("name")
-        avatar_url = github_data.get("avatar_url")
         raw_token = github_data.get("access_token")
+        enc_token = encrypt_secret(raw_token) if raw_token else None
 
-        stmt = (
-            select(User)
-            .where((User.github_id == github_id) | (User.email == email))
-            .options(selectinload(User.memberships).selectinload(Membership.organization))
-        )
-        result = await session.execute(stmt)
-        user = result.scalar_one_or_none()
-
-        encrypted_token = encrypt_secret(raw_token) if raw_token else None
-
-        if not user:
-            user = User(
-                email=email,
-                username=login,
-                full_name=name,
-                avatar_url=avatar_url,
-                github_id=github_id,
-                github_username=login,
-                encrypted_github_token=encrypted_token,
-                is_active=True,
-            )
-            session.add(user)
-            await session.flush()
-
-            clean_slug = re.sub(r"[^a-zA-Z0-9-]", "-", login.lower()).strip("-")
-            org = Organization(
-                name=f"{login}'s Workspace",
-                slug=f"{clean_slug}-workspace",
-                plan=OrgPlan.FREE,
-                is_active=True,
-            )
-            session.add(org)
-            await session.flush()
-
-            membership = Membership(
-                user_id=user.id,
-                organization_id=org.id,
-                role=UserRole.OWNER,
-                is_active=True,
-            )
-            session.add(membership)
-            await session.flush()
-        else:
-            user.github_username = login
-            user.avatar_url = avatar_url
-            if encrypted_token:
-                user.encrypted_github_token = encrypted_token
-
-            if not user.memberships:
-                clean_slug = re.sub(r"[^a-zA-Z0-9-]", "-", login.lower()).strip("-")
-                org = Organization(
-                    name=f"{login}'s Workspace",
-                    slug=f"{clean_slug}-workspace",
-                    plan=OrgPlan.FREE,
-                    is_active=True,
-                )
-                session.add(org)
-                await session.flush()
-                membership = Membership(
-                    user_id=user.id,
-                    organization_id=org.id,
-                    role=UserRole.OWNER,
-                    is_active=True,
-                )
-                session.add(membership)
-                await session.flush()
-            else:
-                org = user.memberships[0].organization
-
+        user, _ = await _upsert_user(session, github_data, enc_token)
         await session.commit()
 
-        # Eager reload user and relationships to avoid MissingGreenlet lazy load issues
+        # Reload with relationships attached
         reload_stmt = (
             select(User)
             .where(User.id == user.id)
@@ -197,7 +200,6 @@ class AuthService:
 
         access_token = create_access_token({"sub": user.id, "email": user.email, "org_id": org.id})
         refresh_token = create_refresh_token({"sub": user.id})
-
         return user, org, access_token, refresh_token
 
     @staticmethod

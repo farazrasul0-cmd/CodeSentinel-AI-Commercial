@@ -121,3 +121,25 @@ async def test_stripe_webhook_idempotency_and_state_lifecycle(db_session: AsyncS
     assert org.plan == OrgPlan.FREE
     assert org.subscription_status == "canceled"
     assert org.max_seats == 1
+
+@pytest.mark.asyncio
+async def test_billing_unhandled_webhook_event(db_session: AsyncSession):
+    """Verifies graceful acknowledgement and idempotency recording of unhandled Stripe webhook events."""
+    is_processed, msg = await BillingService.process_stripe_webhook_event(
+        session=db_session,
+        event_id="evt_unknown_9999",
+        event_type="charge.dispute.created",
+        data_object={"id": "dp_12345"},
+    )
+    assert is_processed is True
+    assert msg == "event_processed"
+
+    # Re-sending unhandled event should be rejected by idempotency
+    dup_processed, dup_msg = await BillingService.process_stripe_webhook_event(
+        session=db_session,
+        event_id="evt_unknown_9999",
+        event_type="charge.dispute.created",
+        data_object={"id": "dp_12345"},
+    )
+    assert dup_processed is True
+    assert dup_msg == "already_processed"

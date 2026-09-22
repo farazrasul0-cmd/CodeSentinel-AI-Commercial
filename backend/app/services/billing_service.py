@@ -16,12 +16,78 @@ if settings.STRIPE_API_KEY:
     stripe.api_key = settings.STRIPE_API_KEY
 
 
+async def _handle_checkout_completed(session: AsyncSession, data_object: dict[str, Any]) -> None:
+    """Handles checkout.session.completed event."""
+    org_id = data_object.get("client_reference_id") or data_object.get("metadata", {}).get("org_id")
+    customer_id = data_object.get("customer")
+    sub_id = data_object.get("subscription")
+
+    if org_id:
+        stmt = select(Organization).where(Organization.id == org_id)
+        res = await session.execute(stmt)
+        org = res.scalar_one_or_none()
+        if org:
+            org.stripe_customer_id = customer_id
+            org.stripe_subscription_id = sub_id
+            org.plan = OrgPlan.TEAM
+            org.subscription_status = "active"
+            logger.info(f"[Billing] Upgraded Org {org.name} to TEAM tier via Checkout")
+
+
+async def _handle_subscription_updated(session: AsyncSession, data_object: dict[str, Any]) -> None:
+    """Handles customer.subscription.updated event."""
+    sub_id = data_object.get("id")
+    customer_id = data_object.get("customer")
+    status = data_object.get("status", "active")
+    quantity = data_object.get("quantity")
+    if quantity is None:
+        items = data_object.get("items", {}).get("data", [])
+        quantity = items[0].get("quantity", 5) if items else 5
+
+    stmt = select(Organization).where(
+        (Organization.stripe_subscription_id == sub_id) | (Organization.stripe_customer_id == customer_id)
+    )
+    res = await session.execute(stmt)
+    org = res.scalar_one_or_none()
+    if org:
+        org.subscription_status = status
+        org.max_seats = quantity
+        logger.info(f"[Billing] Updated subscription status={status}, seats={quantity} for Org {org.name}")
+
+
+async def _handle_subscription_deleted(session: AsyncSession, data_object: dict[str, Any]) -> None:
+    """Handles customer.subscription.deleted event."""
+    sub_id = data_object.get("id")
+    customer_id = data_object.get("customer")
+
+    stmt = select(Organization).where(
+        (Organization.stripe_subscription_id == sub_id) | (Organization.stripe_customer_id == customer_id)
+    )
+    res = await session.execute(stmt)
+    org = res.scalar_one_or_none()
+    if org:
+        org.plan = OrgPlan.FREE
+        org.subscription_status = "canceled"
+        org.max_seats = 1
+        logger.info(f"[Billing] Downgraded Org {org.name} to FREE tier on subscription cancellation")
+
+
+async def _handle_payment_failed(session: AsyncSession, data_object: dict[str, Any]) -> None:
+    """Handles invoice.payment_failed event."""
+    customer_id = data_object.get("customer")
+    stmt = select(Organization).where(Organization.stripe_customer_id == customer_id)
+    res = await session.execute(stmt)
+    org = res.scalar_one_or_none()
+    if org:
+        org.subscription_status = "past_due"
+        logger.warning(f"[Billing] Payment failed for Org {org.name}; marked past_due")
+
+
 class BillingService:
     """Manages Stripe Checkout, Self-Serve Billing Portals, and Idempotent Webhook Processing."""
 
-    @classmethod
+    @staticmethod
     async def create_checkout_session(
-        cls,
         org: Organization,
         user: User,
         price_id: str,
@@ -50,9 +116,8 @@ class BillingService:
         checkout_session = stripe.checkout.Session.create(**session_params)
         return checkout_session.url or ""
 
-    @classmethod
+    @staticmethod
     async def create_customer_portal_session(
-        cls,
         org: Organization,
         return_url: str = "http://localhost:5173/settings/billing",
     ) -> str:
@@ -77,12 +142,7 @@ class BillingService:
         event_type: str,
         data_object: dict[str, Any],
     ) -> tuple[bool, str]:
-        """Processes Stripe event with strict DB-backed idempotency to prevent duplicate mutations.
-        
-        Returns:
-            (is_processed, message)
-        """
-        # 1. Idempotency Check: reject duplicate event_id
+        """Processes Stripe event with strict DB-backed idempotency to prevent duplicate mutations."""
         stmt = select(ProcessedWebhookEvent).where(ProcessedWebhookEvent.event_id == event_id)
         res = await session.execute(stmt)
         if res.scalar_one_or_none():
@@ -91,67 +151,16 @@ class BillingService:
 
         logger.info(f"[Billing] Ingesting Stripe webhook event {event_id}: {event_type}")
 
-        # 2. State Transition Processing
-        if event_type == "checkout.session.completed":
-            org_id = data_object.get("client_reference_id") or data_object.get("metadata", {}).get("org_id")
-            customer_id = data_object.get("customer")
-            sub_id = data_object.get("subscription")
+        event_handlers = {
+            "checkout.session.completed": _handle_checkout_completed,
+            "customer.subscription.updated": _handle_subscription_updated,
+            "customer.subscription.deleted": _handle_subscription_deleted,
+            "invoice.payment_failed": _handle_payment_failed,
+        }
+        handler = event_handlers.get(event_type)
+        if handler:
+            await handler(session, data_object)
 
-            if org_id:
-                org_stmt = select(Organization).where(Organization.id == org_id)
-                org_res = await session.execute(org_stmt)
-                org = org_res.scalar_one_or_none()
-                if org:
-                    org.stripe_customer_id = customer_id
-                    org.stripe_subscription_id = sub_id
-                    org.plan = OrgPlan.TEAM
-                    org.subscription_status = "active"
-                    logger.info(f"[Billing] Upgraded Org {org.name} to TEAM tier via Checkout")
-
-        elif event_type == "customer.subscription.updated":
-            sub_id = data_object.get("id")
-            customer_id = data_object.get("customer")
-            status = data_object.get("status", "active")
-            quantity = data_object.get("quantity")
-            if quantity is None:
-                items = data_object.get("items", {}).get("data", [])
-                quantity = items[0].get("quantity", 5) if items else 5
-
-            org_stmt = select(Organization).where(
-                (Organization.stripe_subscription_id == sub_id) | (Organization.stripe_customer_id == customer_id)
-            )
-            org_res = await session.execute(org_stmt)
-            org = org_res.scalar_one_or_none()
-            if org:
-                org.subscription_status = status
-                org.max_seats = quantity
-                logger.info(f"[Billing] Updated subscription status={status}, seats={quantity} for Org {org.name}")
-
-        elif event_type == "customer.subscription.deleted":
-            sub_id = data_object.get("id")
-            customer_id = data_object.get("customer")
-
-            org_stmt = select(Organization).where(
-                (Organization.stripe_subscription_id == sub_id) | (Organization.stripe_customer_id == customer_id)
-            )
-            org_res = await session.execute(org_stmt)
-            org = org_res.scalar_one_or_none()
-            if org:
-                org.plan = OrgPlan.FREE
-                org.subscription_status = "canceled"
-                org.max_seats = 1
-                logger.info(f"[Billing] Downgraded Org {org.name} to FREE tier on subscription cancellation")
-
-        elif event_type == "invoice.payment_failed":
-            customer_id = data_object.get("customer")
-            org_stmt = select(Organization).where(Organization.stripe_customer_id == customer_id)
-            org_res = await session.execute(org_stmt)
-            org = org_res.scalar_one_or_none()
-            if org:
-                org.subscription_status = "past_due"
-                logger.warning(f"[Billing] Payment failed for Org {org.name}; marked past_due")
-
-        # 3. Record processed event for idempotency
         idempotent_record = ProcessedWebhookEvent(
             event_id=event_id,
             provider="stripe",

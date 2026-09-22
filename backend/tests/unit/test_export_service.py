@@ -126,3 +126,44 @@ def test_printable_html_export():
     assert "Backend Core" in html_content
     assert "window.print()" in html_content
     assert "Repository Quality Index" in html_content
+
+
+def test_sarif_export_empty_report():
+    """Verifies that an empty report without findings produces valid SARIF v2.1.0."""
+    empty_report = AnalysisReport(
+        id="rep-empty",
+        job_id="job-empty",
+        overall_score=100.0,
+        maintainability_score=100.0,
+        security_score=100.0,
+        testing_score=100.0,
+        architecture_score=100.0,
+        total_files=0,
+        total_lines_of_code=0,
+        technical_debt_minutes=0,
+        summary_metadata={},
+    )
+    empty_report.file_metrics = []
+    empty_report.issues = []
+    empty_report.defect_predictions = []
+    empty_report.review_comments = []
+
+    sarif = ExportService.generate_sarif(empty_report)
+    assert sarif.version == "2.1.0"
+    assert len(sarif.runs) == 1
+    assert len(sarif.runs[0].results) == 0
+
+
+def test_markdown_and_html_with_custom_name():
+    """Verifies repository branding in Markdown and HTML outputs."""
+    report = _create_mock_report()
+    custom_name = "Enterprise/Core-API"
+
+    md = ExportService.generate_markdown_summary(report, repo_name=custom_name)
+    assert custom_name in md
+    assert "Overall Quality Score:" in md
+
+    html_out = ExportService.generate_printable_html(report, repo_name=custom_name)
+    assert custom_name in html_out
+    assert "<!DOCTYPE html>" in html_out
+    assert "Executive Report" in html_out

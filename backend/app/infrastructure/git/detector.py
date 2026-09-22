@@ -87,45 +87,40 @@ class LanguageDetector:
     def detect_project_type(repo_path: Path) -> list[str]:
         """Detects high-level frameworks and project types present in the repository."""
         detected_types: list[str] = []
-
-        # Check file presence
         file_names = {f.name.lower() for f in repo_path.glob("*") if f.is_file()}
 
-        if "cargo.toml" in file_names:
-            detected_types.append("Rust Cargo")
-        if "go.mod" in file_names:
-            detected_types.append("Go Module")
-        if "pom.xml" in file_names:
-            detected_types.append("Java Maven")
-        if "build.gradle" in file_names or "build.gradle.kts" in file_names:
-            detected_types.append("Java Gradle")
-        if "manage.py" in file_names:
-            detected_types.append("Django")
+        manifest_map = {
+            "cargo.toml": "Rust Cargo",
+            "go.mod": "Go Module",
+            "pom.xml": "Java Maven",
+            "build.gradle": "Java Gradle",
+            "build.gradle.kts": "Java Gradle",
+            "manage.py": "Django",
+        }
+        for fname, ptype in manifest_map.items():
+            if fname in file_names and ptype not in detected_types:
+                detected_types.append(ptype)
 
-        # Check requirements or package.json
+        # Check python requirements
         req_file = repo_path / "requirements.txt"
         if req_file.exists():
             try:
                 content = req_file.read_text(encoding="utf-8", errors="ignore").lower()
-                if "fastapi" in content and "FastAPI" not in detected_types:
-                    detected_types.append("FastAPI")
-                if "flask" in content and "Flask" not in detected_types:
-                    detected_types.append("Flask")
-                if "django" in content and "Django" not in detected_types:
-                    detected_types.append("Django")
+                for fw in ("fastapi", "flask", "django"):
+                    title_fw = fw.capitalize() if fw != "fastapi" else "FastAPI"
+                    if fw in content and title_fw not in detected_types:
+                        detected_types.append(title_fw)
             except Exception:
                 pass
 
+        # Check JS package.json
         pkg_json = repo_path / "package.json"
         if pkg_json.exists():
             try:
                 content = pkg_json.read_text(encoding="utf-8", errors="ignore").lower()
-                if "next" in content:
-                    detected_types.append("Next.js")
-                elif "react" in content:
-                    detected_types.append("React")
-                if "express" in content:
-                    detected_types.append("Express")
+                for kw, label in [("next", "Next.js"), ("react", "React"), ("express", "Express")]:
+                    if kw in content and label not in detected_types:
+                        detected_types.append(label)
             except Exception:
                 pass
 
