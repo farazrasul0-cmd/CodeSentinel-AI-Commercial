@@ -45,7 +45,7 @@ import {
 type ActiveTab = "reviews" | "repositories" | "scanner" | "scorecard" | "billing" | "benchmarks";
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<ActiveTab>("reviews");
+  const [activeTab, setActiveTab] = useState<ActiveTab>("scanner");
   const [activeReport, setActiveReport] = useState<AnalysisReport | null>(null);
 
   // Multi-Tenancy & Commercial State
@@ -157,7 +157,7 @@ export const App: React.FC = () => {
           <div className="flex items-center gap-4">
             <button
               type="button"
-              onClick={() => setActiveTab("reviews")}
+              onClick={() => setActiveTab("scanner")}
               className="flex items-center gap-2.5 text-left group"
             >
               <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-pink-500 via-rose-500 to-orange-500 flex items-center justify-center text-white shadow-md shadow-pink-500/20 group-hover:scale-105 transition-transform">
@@ -220,34 +220,6 @@ export const App: React.FC = () => {
 
           {/* Functional Navigation Tabs */}
           <nav className="flex items-center space-x-1 sm:space-x-1.5">
-            {/* PR Reviews Tab */}
-            <button
-              type="button"
-              onClick={() => setActiveTab("reviews")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                activeTab === "reviews"
-                  ? "bg-white/10 text-white shadow-sm border border-gray-700"
-                  : "text-gray-300 hover:text-white hover:bg-white/5"
-              }`}
-            >
-              <GitPullRequest className="w-3.5 h-3.5 text-pink-400" />
-              <span>PR Bot</span>
-            </button>
-
-            {/* Repositories Tab */}
-            <button
-              type="button"
-              onClick={() => setActiveTab("repositories")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                activeTab === "repositories"
-                  ? "bg-white/10 text-white shadow-sm border border-gray-700"
-                  : "text-gray-300 hover:text-white hover:bg-white/5"
-              }`}
-            >
-              <Server className="w-3.5 h-3.5 text-indigo-400" />
-              <span className="hidden sm:inline">Repositories</span>
-            </button>
-
             {/* Scanner Tab */}
             <button
               type="button"
@@ -274,6 +246,34 @@ export const App: React.FC = () => {
             >
               <Radar className="w-3.5 h-3.5 text-blue-400" />
               <span className="hidden md:inline">Radar</span> Scorecard
+            </button>
+
+            {/* PR Reviews Tab */}
+            <button
+              type="button"
+              onClick={() => setActiveTab("reviews")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                activeTab === "reviews"
+                  ? "bg-white/10 text-white shadow-sm border border-gray-700"
+                  : "text-gray-300 hover:text-white hover:bg-white/5"
+              }`}
+            >
+              <GitPullRequest className="w-3.5 h-3.5 text-pink-400" />
+              <span>PR Bot</span>
+            </button>
+
+            {/* Repositories Tab */}
+            <button
+              type="button"
+              onClick={() => setActiveTab("repositories")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                activeTab === "repositories"
+                  ? "bg-white/10 text-white shadow-sm border border-gray-700"
+                  : "text-gray-300 hover:text-white hover:bg-white/5"
+              }`}
+            >
+              <Server className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="hidden sm:inline">Repositories</span>
             </button>
 
             {/* Billing Tab */}
