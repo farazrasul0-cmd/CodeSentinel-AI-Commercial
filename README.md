@@ -4,7 +4,7 @@
 
 **Enterprise Automated Pull-Request Review, Polyglot Static Analysis & SaaS Quality Platform.**
 
-[![Backend Tests](https://img.shields.io/badge/backend%20tests-114%20passed-2ea44f?style=flat-square)](https://github.com/farazrasul0-cmd/CodeSentinel-AI-Commercial)
+[![Backend Tests](https://img.shields.io/badge/backend%20tests-117%20passed-2ea44f?style=flat-square)](https://github.com/farazrasul0-cmd/CodeSentinel-AI-Commercial)
 [![Frontend Tests](https://img.shields.io/badge/frontend%20tests-11%20passed-2ea44f?style=flat-square)](https://github.com/farazrasul0-cmd/CodeSentinel-AI-Commercial)
 [![Python](https://img.shields.io/badge/python-3.12-387baf?style=flat-square)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square)](https://fastapi.tiangolo.com)
@@ -17,7 +17,7 @@
 
 <br/>
 
-[Overview](#overview) &bull; [Competitive Comparison](#competitive-advantage) &bull; [Architecture](#enterprise-architecture) &bull; [Quickstart](#commercial-quickstart) &bull; [Billing Model](#seat-metering--billing) &bull; [SOC2 Compliance](#soc2-compliance--security)
+[Overview](#overview) &bull; [Visual Walkthrough](#platform-visuals) &bull; [Competitive Advantage](#competitive-advantage) &bull; [Architecture](#enterprise-architecture) &bull; [Quickstart](#commercial-quickstart) &bull; [Billing Model](#seat-metering--billing) &bull; [Security Readiness](#enterprise-security--audit-readiness)
 
 </div>
 
@@ -25,9 +25,9 @@
 
 ## Overview
 
-**CodeSentinel AI Commercial** transforms software quality analysis and code review into a scalable, enterprise-grade B2B SaaS platform. Engineered to compete directly with **CodeRabbit** ($24&ndash;$72/dev/mo) and **SonarQube Cloud**, CodeSentinel delivers automated pull-request review comments, native 1-click remediation suggestions, polyglot AST security analysis, and TreeSHAP explainable defect prediction under a strict **<60-second SLA**.
+**CodeSentinel AI Commercial** transforms software quality analysis and code review into a scalable, enterprise-grade B2B SaaS platform. Engineered to compete directly with **CodeRabbit** ($24&ndash;$72/dev/mo) and **SonarQube Cloud**, CodeSentinel delivers automated pull-request review comments, AST-validated 1-click remediation suggestions, polyglot static analysis, and TreeSHAP explainable defect prediction under a strict **<60-second SLA**.
 
-Unlike legacy static analysis tools that flood developers with noisy warnings or naive LLM wrappers that inflate inference costs and hallucinate syntax, CodeSentinel combines:
+Unlike legacy static analysis tools that flood developers with noisy warnings or open-ended LLM wrappers that inflate inference costs and hallucinate syntax, CodeSentinel combines:
 1. **Tree-sitter Polyglot AST Parsing**: Instant parsing across Python, TypeScript, JavaScript, Go, Java, and Rust.
 2. **Dual-Layer Secret Detection**: Deterministic signatures paired with Shannon entropy calculations (>3.8 bits/sym) and test-fixture suppression.
 3. **Diff-Scoped PR Review Bot**: Fast, hunk-targeted evaluation that updates pull requests in-place and formats suggestions as native GitHub 1-click apply blocks.
@@ -35,18 +35,81 @@ Unlike legacy static analysis tools that flood developers with noisy warnings or
 
 ---
 
+## Platform Visuals
+
+### 1. Automated GitHub PR Review with 1-Click Suggestion
+
+```markdown
+<!-- codesentinel-pr-summary -->
+### 🛡️ CodeSentinel AI — PR Review & Quality Gate
+
+| Metric | Baseline | This PR | Delta | Status |
+| :--- | :---: | :---: | :---: | :---: |
+| **Repository Quality Index (RQI)** | `84.8` | `89.0` | `+4.2` | ✅ **PASSED** |
+| **Security Finding Count** | `0` | `0` | `0` | ✅ **CLEAN** |
+| **Maintainability Score** | `81.0` | `87.5` | `+6.5` | ✅ **IMPROVED** |
+
+> **Summary**: Comprehensive cryptographic upgrade verified. Replaced legacy ECB cipher with AES-256-GCM. 
+> 1 inline suggestion generated for nonce uniqueness check.
+```
+
+**Inline Hunk Review Comment**:
+```diff
+@@ -24,8 +24,14 @@ export class EnvelopeEncryptor {
+   async encrypt(data: Buffer, masterKey: string): Promise<CipherPayload> {
+-    const cipher = crypto.createCipher('aes-128-ecb', masterKey);
++    const iv = crypto.randomBytes(12);
++    const cipher = crypto.createCipheriv('aes-256-gcm', keyBuffer, iv);
+```
+> ⚠️ **CodeSentinel AI** `[CRYPTO-GCM-NONCE-CHECK]` &bull; Severity: **MEDIUM**
+> 
+> *Ensure Nonce Uniqueness under High Throughput*: Standard `randomBytes(12)` is strong, but in ultra-high concurrency distributed services, prepending a sequential counter or host identifier prevents birthday-bound IV reuse.
+>
+> ```suggestion
+>     // Ensure 96-bit unique IV combining high-res timestamp and CSPRNG
+>     const iv = Buffer.concat([crypto.randomBytes(8), Buffer.alloc(4, Date.now() & 0xffffffff)]);
+> ```
+> <button><b>Commit suggestion</b></button> *(Native 1-Click Commit directly on GitHub)*
+
+---
+
+### 2. Commercial Web Dashboard & Seat Utilization
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│  🛡️ CodeSentinel AI  [ Acme Payments Inc. ▾ ] [ Team Plan ]    Seats: 4 / 10 Active     │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│  [PR Bot Reviews]  [Connected Repositories]  [Deep Scanner]  [Radar Scorecard]  [Billing]│
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│   ORGANIZATION REPOSITORY HEALTH                  ACTIVE PR SEAT METER (30-DAY)        │
+│   ┌───────────────────────────────────┐           ┌──────────────────────────────────┐ │
+│   │ 4-Pillar RQI Score: 88.4 / 100    │           │ Active Contributors: 4 / 10      │ │
+│   │                                   │           │ [████████████░░░░░░░░░░] 40%     │ │
+│   │   Security:       94.0 (Grade A)  │           │                                  │ │
+│   │   Maintainability:88.2 (Grade B)  │           │ Roster (Trailing 30 Days):       │ │
+│   │   Architecture:   86.5 (Grade B)  │           │  • @farazrasul  (Last PR: Today) │ │
+│   │   Test Coverage:  85.0 (Grade B)  │           │  • @sarahchen   (Last PR: Today) │ │
+│   └───────────────────────────────────┘           │  • @mkaiser     (Last PR: 2d ago)│ │
+│                                                   │  • @dev-bot-lead(Last PR: 4d ago)│ │
+│                                                   └──────────────────────────────────┘ │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## Competitive Advantage
 
 | Feature | CodeSentinel AI Commercial | CodeRabbit | SonarQube Cloud |
-| :--- | :---: | :---: | :---: |
-| **Pricing Model** | $29/active PR author/mo (Soft-gated) | $24&ndash;$72/dev/mo | Line of Code (LOC) tiering |
-| **Diff-Scoped Review SLA** | **<60s** (Dedicated `pr_lane`) | 2&ndash;5 minutes | 3&ndash;15 minutes |
-| **1-Click Remediation** | Native GitHub ```suggestion``` blocks | Inline markdown | Manual remediation |
-| **Noise & Anti-Spam** | Single in-place comment (HTTP PATCH) | Multiple PR comments | External check-run only |
-| **Secret Detection** | Dual-Layer (Regex + Shannon Entropy) | Basic AI check | Pattern-based |
-| **Explainable Defect Risk**| TreeSHAP feature contributions | None | None |
-| **Sandboxing & Isolation** | Ephemeral context (.git/hooks stripped) | Cloud containers | Server agent |
-| **Deployment Model** | Self-hosted Docker / Multi-tenant SaaS | SaaS only | SaaS or Self-hosted |
+| :--- | :--- | :--- | :--- |
+| **Pricing Model** | **$29/active PR author/mo** (Soft-gated) | $24–$72/dev/mo | Line of Code (LOC) tiering |
+| **Review Turnaround SLA** | **<60s** (Dedicated `pr_lane`) | 2–5 minutes | 3–15 minutes |
+| **Remediation Engine** | **AST-Validated Suggestions** (Tree-sitter checked) | LLM-generated suggestions | Manual remediation guides |
+| **Inline Comment Policy** | **Capped Top-5** (Strict anti-fatigue) | Configurable / Full review | PR decoration / check-runs |
+| **Secret Detection** | **Dual-Layer** (Regex + Shannon Entropy) | LLM heuristics | Static rule patterns |
+| **Defect Risk Explainability** | **TreeSHAP local feature drivers** | Black-box LLM | Heuristic rule debt |
+| **Execution Sandboxing** | **Ephemeral container** (`.git/hooks` stripped) | Cloud workers | Server agent |
+| **Deployment Model** | **Self-hosted Docker / Multi-tenant SaaS** | SaaS only | SaaS / Self-hosted |
 
 ---
 
@@ -148,9 +211,9 @@ CodeSentinel AI employs a transparent, developer-friendly **Active PR Contributo
 
 ---
 
-## SOC2 Compliance & Security
+## Enterprise Security & Audit Readiness
 
-- **Row-Level Security (RLS)**: Enforced directly inside PostgreSQL via session variables, ensuring complete isolation across customer tenants.
-- **Cryptographic Hygiene**: Envelope encryption with Fernet symmetric ciphers encrypts all OAuth secrets and installation tokens at rest.
-- **Immutable Audit Logging**: Every administrative action, API key generation, seat adjustment, and security finding override is recorded in an immutable, append-only SOC2 audit trail accessible via `/api/v1/audit/logs`.
-- **Ephemeral Sandbox Neutralization**: Repositories are cloned into ephemeral isolation sandboxes with `.git/hooks/` stripped immediately to prevent remote code execution (RCE) and symlink escape attacks.
+- **PostgreSQL Row-Level Security (RLS)**: Enforced directly inside PostgreSQL via session variables (`SET LOCAL app.current_org_id = :org_id`), providing mathematical tenant isolation at the query level.
+- **Cryptographic Envelope Encryption**: Symmetric Fernet ciphers protect third-party access tokens and credentials at rest using SHA-256 derived keys.
+- **Structured Audit Logging**: Comprehensive audit trail recording user logins, role modifications, API key generation, and quality policy overrides via `/api/v1/audit/logs`.
+- **Zero-Trust Execution Sandbox**: Ephemeral container execution removes executable `.git/hooks`, enforces process timeouts, and guards against symlink path traversal.

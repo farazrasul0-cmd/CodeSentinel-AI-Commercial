@@ -89,7 +89,7 @@ CodeSentinel AI Commercial is an enterprise software quality engineering and aut
 - **Soft-Gating Architecture**: When seat limits are reached, PR scanning continues uninterrupted while administrative notices and soft alerts guide account owners to add seats.
 - **Idempotent Webhooks**: All Stripe events (`checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`) are deduplicated using database idempotency records.
 
-### Pillar 6: SOC2 Compliance & Tamper-Resistant Audit Logging
+### Pillar 6: Enterprise Security & Audit Readiness
 - **Structured Audit Trails**: Every sensitive action (`API_KEY_CREATED`, `SEATS_UPGRADED`, `SETTINGS_CHANGED`, `QUALITY_GATE_BLOCKED`) is immutably logged with actor, IP address, timestamp, and metadata.
 - **Role-Based Audit Queries**: Audit log query and export endpoints are strictly restricted to `ADMIN` and `OWNER` roles.
 
