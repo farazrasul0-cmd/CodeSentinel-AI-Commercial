@@ -170,8 +170,18 @@ class CodeSmellScanner:
         else:
             new_depth = current_depth
 
-        for child in ast.iter_child_nodes(node):
-            cls._check_block_nesting(file_path, child, new_depth, issues)
+        if isinstance(node, ast.If):
+            for child in node.body:
+                cls._check_block_nesting(file_path, child, new_depth, issues)
+            # Handle elif ladder: an elif branch is a flat sequential branch, keep current_depth
+            if len(node.orelse) == 1 and isinstance(node.orelse[0], ast.If):
+                cls._check_block_nesting(file_path, node.orelse[0], current_depth, issues)
+            else:
+                for child in node.orelse:
+                    cls._check_block_nesting(file_path, child, new_depth, issues)
+        else:
+            for child in ast.iter_child_nodes(node):
+                cls._check_block_nesting(file_path, child, new_depth, issues)
 
     @classmethod
     def _check_dead_code(

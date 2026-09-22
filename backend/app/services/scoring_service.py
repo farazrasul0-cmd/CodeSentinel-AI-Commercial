@@ -1,4 +1,4 @@
-"""Composite Multi-Dimensional Software Quality Scoring Algorithm.
+﻿"""Composite Multi-Dimensional Software Quality Scoring Algorithm.
 
 Calculates Maintainability (30%), Security (35%), Architecture (20%), and Testing (15%)
 pillar scores, produces letter grades (A-F), radar coordinates, and prioritized recommendations.
@@ -33,8 +33,9 @@ class QualityScorecard:
 class ScoringService:
     """Multi-Dimensional Quality Scoring Engine implementing academic and industry formulas."""
 
-    @staticmethod
+    @classmethod
     def calculate_scores(
+        cls,
         file_metrics: list[FileMetric],
         issues: list[Issue],
         reviews: list[CodeReviewFinding] | list[ReviewComment] | list[dict[str, Any]] | None = None,
@@ -44,264 +45,55 @@ class ScoringService:
         """Calculates 4 pillar scores (0-100), composite RQI (0-100), grade, and recommendations."""
         total_files = len(file_metrics)
 
-        # ---------------------------------------------------------------------
-        # 1. False-Positive Suppression Tracking
-        # ---------------------------------------------------------------------
-        suppressed_rules: set[str] = set()
-        suppressed_locations: set[tuple[str, int]] = set()
-        false_positives_count = 0
+        # 1. False-Positive Tracking
+        suppressed_rules, suppressed_locations, fp_count = cls._extract_suppressions(reviews)
 
-        if reviews:
-            for rev in reviews:
-                if isinstance(rev, dict):
-                    cat = rev.get("category")
-                    fp_file = rev.get("file_path", "")
-                    fp_line = rev.get("line_start", 0)
-                    rule_id = rev.get("rule_id", "")
-                elif isinstance(rev, ReviewComment):
-                    fp_file = rev.file_path
-                    fp_line = rev.line_number
-                    rule_id = ""
-                    cat = (
-                        FindingCategoryEnum.FALSE_POSITIVE_OVERRIDE
-                        if (
-                            "FALSE_POSITIVE" in (rev.comment or "")
-                            or rev.status == CommentStatus.DISMISSED
-                        )
-                        else None
-                    )
-                else:
-                    cat = getattr(rev, "category", None)
-                    fp_file = getattr(rev, "file_path", "")
-                    fp_line = getattr(rev, "line_start", 0)
-                    rule_id = getattr(rev, "rule_id", "")
+        # 2. Maintainability Pillar (30%)
+        maintainability, avg_mi = cls._calculate_maintainability(file_metrics, total_files)
 
-                if cat == FindingCategoryEnum.FALSE_POSITIVE_OVERRIDE or cat == "FALSE_POSITIVE_OVERRIDE":
-                    false_positives_count += 1
-                    if rule_id:
-                        suppressed_rules.add(rule_id)
-                    if fp_file and fp_line:
-                        suppressed_locations.add((fp_file, fp_line))
-
-        # ---------------------------------------------------------------------
-        # 2. Maintainability Pillar Score (S_maint in [0, 100])
-        # Formula: S_maint = max(0, min(100, avg_MI - P_CC - P_Cognitive - P_Halstead))
-        # ---------------------------------------------------------------------
-        if total_files > 0:
-            avg_mi = sum((m.maintainability_index or 100.0) for m in file_metrics) / total_files
-
-            # P_CC: McCabe Cyclomatic Complexity penalty for CC > 10
-            excess_cc = sum(max(0, (m.cyclomatic_complexity or 0) - 10) for m in file_metrics)
-            p_cc = min(25.0, 2.5 * (excess_cc / total_files))
-
-            # P_Cognitive: Cognitive Complexity nesting penalty for Cog > 12
-            excess_cog = sum(max(0, (m.cognitive_complexity or 0) - 12) for m in file_metrics)
-            p_cog = min(15.0, 1.5 * (excess_cog / total_files))
-
-            # P_Halstead: Halstead effort penalty
-            total_effort = 0.0
-            for m in file_metrics:
-                hm = m.halstead_metrics or {}
-                total_effort += float(hm.get("effort", 0.0) or 0.0)
-            p_halstead = min(10.0, total_effort / (1_000_000.0 * total_files))
-
-            maintainability = max(0.0, min(100.0, avg_mi - p_cc - p_cog - p_halstead))
-        else:
-            maintainability = 85.0
-
-        # ---------------------------------------------------------------------
-        # 3. Security Pillar Score (S_sec in [0, 100])
-        # Formula: S_sec = max(0, 100 - sum(w_j for validated issues))
-        # ---------------------------------------------------------------------
-        security = 100.0
-        sec_issues = [i for i in issues if i.category == FindingCategory.SECURITY]
-        validated_sec_issues: list[Issue] = []
-
-        for issue in sec_issues:
-            # Check if this issue was overridden/suppressed by Phase 5 Hybrid Triangulation
-            is_suppressed = (
-                (issue.rule_id and issue.rule_id in suppressed_rules)
-                or ((issue.file_path, issue.line_start) in suppressed_locations)
-            )
-            if is_suppressed:
-                continue
-
-            validated_sec_issues.append(issue)
-            if issue.severity == FindingSeverity.CRITICAL:
-                security -= 25.0
-            elif issue.severity == FindingSeverity.HIGH:
-                security -= 15.0
-            elif issue.severity == FindingSeverity.MEDIUM:
-                security -= 8.0
-            elif issue.severity == FindingSeverity.LOW:
-                security -= 3.0
-
-        security = max(0.0, security)
-
-        # ---------------------------------------------------------------------
-        # 4. Reliability & Architecture Pillar Score (S_arch in [0, 100])
-        # Formula: S_arch = max(0, 100 - P_circular - P_coupling - P_defect_risk - P_smells)
-        # ---------------------------------------------------------------------
-        num_cycles = len(circular_dependencies) if circular_dependencies is not None else 0
-        p_circular = 15.0 * num_cycles
-
-        # High coupling modules (high fan-in/fan-out or method bloat)
-        # Pure DTO / schema definition modules and __init__.py are excluded from class-bloat heuristics
-        def _is_schema_or_dto(path: str) -> bool:
-            p = path.replace("\\", "/").lower()
-            return p.endswith("__init__.py") or "/schemas/" in p or "/dto/" in p or "/types/" in p
-
-        high_coupling_count = sum(
-            1
-            for m in file_metrics
-            if not _is_schema_or_dto(m.file_path)
-            and ((m.function_count or 0) > 20 or (m.class_count or 0) > 6)
+        # 3. Security Pillar (35%)
+        security, validated_sec = cls._calculate_security(
+            issues, suppressed_rules, suppressed_locations
         )
-        p_coupling = min(25.0, 3.0 * high_coupling_count)
 
-        # Defect risk penalty from Phase 4 ML Defect Prediction
-        p_defect_risk = 0.0
-        if defect_predictions and total_files > 0:
-            probs: list[float] = []
-            critical_risk_count = 0
-            for dp in defect_predictions:
-                p = float(getattr(dp, "defect_probability", 0.0) if hasattr(dp, "defect_probability") else dp.get("defect_probability", 0.0))
-                tier = str(getattr(dp, "risk_tier", "LOW") if hasattr(dp, "risk_tier") else dp.get("risk_tier", "LOW"))
-                probs.append(p)
-                if tier == "CRITICAL" or p >= 0.70:
-                    critical_risk_count += 1
-            avg_prob = sum(probs) / len(probs) if probs else 0.0
-            p_defect_risk = min(35.0, (30.0 * avg_prob) + (20.0 * (critical_risk_count / total_files)))
+        # 4. Architecture & Reliability Pillar (20%)
+        architecture, num_cycles, high_coupling_count = cls._calculate_architecture(
+            file_metrics, issues, circular_dependencies, defect_predictions, total_files
+        )
 
-        # Architecture & Code smell issues penalty
-        arch_issues = [
-            i
-            for i in issues
-            if i.category in (FindingCategory.ARCHITECTURE, FindingCategory.CODE_SMELL)
-        ]
-        p_smells = 0.0
-        for issue in arch_issues:
-            if issue.severity in (FindingSeverity.CRITICAL, FindingSeverity.HIGH):
-                p_smells += 8.0
-            elif issue.severity == FindingSeverity.MEDIUM:
-                p_smells += 3.0
-            else:
-                p_smells += 1.0
-        p_smells = min(30.0, p_smells)
+        # 5. Testing Pillar (15%)
+        testing, test_files = cls._calculate_testing(file_metrics, total_files)
 
-        architecture = max(0.0, 100.0 - p_circular - p_coupling - p_defect_risk - p_smells)
+        # 6. Technical Debt
+        debt_minutes = cls._calculate_technical_debt(issues, suppressed_rules, suppressed_locations)
 
-        # ---------------------------------------------------------------------
-        # 5. Testing Pillar Score (S_test in [0, 100])
-        # Formula: S_test = min(100, max(20, 120 * (TestLOC / TotalLOC) + 40 * (TestFiles / TotalFiles)))
-        # ---------------------------------------------------------------------
-        test_files = [
-            m for m in file_metrics if ("test" in m.file_path.lower() or "spec" in m.file_path.lower())
-        ]
-        if total_files > 0:
-            total_loc = sum((m.sloc or 0) for m in file_metrics)
-            test_loc = sum((m.sloc or 0) for m in test_files)
-            if total_loc > 0 and len(test_files) > 0:
-                loc_ratio = test_loc / total_loc
-                file_ratio = len(test_files) / total_files
-                testing = min(100.0, max(20.0, (120.0 * loc_ratio) + (40.0 * file_ratio)))
-            elif len(test_files) > 0:
-                testing = min(100.0, max(30.0, (len(test_files) / total_files) * 300.0))
-            else:
-                # No test files detected
-                testing = 25.0
-        else:
-            testing = 75.0
-
-        # ---------------------------------------------------------------------
-        # 6. Technical Debt calculation (SQALE estimated minutes to remediate)
-        # ---------------------------------------------------------------------
-        debt_minutes = 0
-        for issue in issues:
-            # Skip suppressed issues from technical debt penalty
-            if (
-                (issue.rule_id and issue.rule_id in suppressed_rules)
-                or ((issue.file_path, issue.line_start) in suppressed_locations)
-            ):
-                continue
-
-            if issue.severity == FindingSeverity.CRITICAL:
-                debt_minutes += 180
-            elif issue.severity == FindingSeverity.HIGH:
-                debt_minutes += 90
-            elif issue.severity == FindingSeverity.MEDIUM:
-                debt_minutes += 45
-            else:
-                debt_minutes += 15
-
-        # ---------------------------------------------------------------------
-        # 7. Composite Quality Index (RQI) and Letter Grade
-        # Weights: Security (35%), Maintainability (30%), Architecture (20%), Testing (15%)
-        # ---------------------------------------------------------------------
+        # 7. Composite RQI
         overall = (
             (0.35 * security)
             + (0.30 * maintainability)
             + (0.20 * architecture)
             + (0.15 * testing)
         )
+        grade = cls._assign_grade(overall)
 
-        grade = ScoringService._assign_grade(overall)
+        # 8. Radar & Pillars
+        radar_data, pillars = cls._build_radar_and_pillars(
+            security=security,
+            maintainability=maintainability,
+            architecture=architecture,
+            testing=testing,
+            avg_mi=avg_mi,
+            total_files=total_files,
+            validated_sec_issues=validated_sec,
+            fp_count=fp_count,
+            num_cycles=num_cycles,
+            high_coupling_count=high_coupling_count,
+            test_files=test_files,
+        )
 
-        # ---------------------------------------------------------------------
-        # 8. Radar Chart Data & Pillar Breakdown
-        # ---------------------------------------------------------------------
-        radar_data = [
-            {"axis": "Security", "value": round(security, 1), "benchmark_value": 85.0},
-            {"axis": "Maintainability", "value": round(maintainability, 1), "benchmark_value": 78.0},
-            {"axis": "Architecture", "value": round(architecture, 1), "benchmark_value": 75.0},
-            {"axis": "Testing", "value": round(testing, 1), "benchmark_value": 70.0},
-            {"axis": "Reliability", "value": round(min(100.0, (security + architecture) / 2.0), 1), "benchmark_value": 80.0},
-        ]
-
-        pillars = [
-            {
-                "name": "Security",
-                "score": round(security, 1),
-                "weight": 0.35,
-                "weighted_contribution": round(0.35 * security, 1),
-                "grade": ScoringService._assign_grade(security),
-                "benchmark_percentile": ScoringService._calculate_percentile(security, 85.0),
-                "summary": f"{len(validated_sec_issues)} active security findings; {false_positives_count} suppressed false alarms.",
-            },
-            {
-                "name": "Maintainability",
-                "score": round(maintainability, 1),
-                "weight": 0.30,
-                "weighted_contribution": round(0.30 * maintainability, 1),
-                "grade": ScoringService._assign_grade(maintainability),
-                "benchmark_percentile": ScoringService._calculate_percentile(maintainability, 78.0),
-                "summary": f"Average MI {avg_mi:.1f} across {total_files} files with cognitive/Halstead penalties." if total_files else "No files analyzed.",
-            },
-            {
-                "name": "Architecture",
-                "score": round(architecture, 1),
-                "weight": 0.20,
-                "weighted_contribution": round(0.20 * architecture, 1),
-                "grade": ScoringService._assign_grade(architecture),
-                "benchmark_percentile": ScoringService._calculate_percentile(architecture, 75.0),
-                "summary": f"{num_cycles} circular import cycles; {high_coupling_count} high-coupling modules.",
-            },
-            {
-                "name": "Testing",
-                "score": round(testing, 1),
-                "weight": 0.15,
-                "weighted_contribution": round(0.15 * testing, 1),
-                "grade": ScoringService._assign_grade(testing),
-                "benchmark_percentile": ScoringService._calculate_percentile(testing, 70.0),
-                "summary": f"{len(test_files)} test files detected in repository.",
-            },
-        ]
-
-        # ---------------------------------------------------------------------
-        # 9. Prioritized Actionable Recommendations (Top 3)
-        # ---------------------------------------------------------------------
-        recommendations = ScoringService._generate_recommendations(
-            validated_sec_issues=validated_sec_issues,
+        # 9. Prioritized Recommendations
+        recommendations = cls._generate_recommendations(
+            validated_sec_issues=validated_sec,
             file_metrics=file_metrics,
             circular_dependencies=circular_dependencies,
             defect_predictions=defect_predictions,
@@ -319,8 +111,273 @@ class ScoringService:
             radar_data=radar_data,
             pillars=pillars,
             recommendations=recommendations,
-            false_positives_suppressed=false_positives_count,
+            false_positives_suppressed=fp_count,
         )
+
+    @staticmethod
+    def _extract_suppressions(
+        reviews: list[CodeReviewFinding] | list[ReviewComment] | list[dict[str, Any]] | None,
+    ) -> tuple[set[str], set[tuple[str, int]], int]:
+        """Extracts suppressed rule IDs and locations from code review overrides."""
+        suppressed_rules: set[str] = set()
+        suppressed_locations: set[tuple[str, int]] = set()
+        fp_count = 0
+
+        if not reviews:
+            return suppressed_rules, suppressed_locations, 0
+
+        for rev in reviews:
+            cat = None
+            fp_file = ""
+            fp_line = 0
+            rule_id = ""
+
+            if isinstance(rev, dict):
+                cat = rev.get("category")
+                fp_file = rev.get("file_path", "")
+                fp_line = rev.get("line_start", 0)
+                rule_id = rev.get("rule_id", "")
+            elif isinstance(rev, ReviewComment):
+                fp_file = rev.file_path
+                fp_line = rev.line_number
+                if "FALSE_POSITIVE" in (rev.comment or "") or rev.status == CommentStatus.DISMISSED:
+                    cat = FindingCategoryEnum.FALSE_POSITIVE_OVERRIDE
+            else:
+                cat = getattr(rev, "category", None)
+                fp_file = getattr(rev, "file_path", "")
+                fp_line = getattr(rev, "line_start", 0)
+                rule_id = getattr(rev, "rule_id", "")
+
+            if cat == FindingCategoryEnum.FALSE_POSITIVE_OVERRIDE or cat == "FALSE_POSITIVE_OVERRIDE":
+                fp_count += 1
+                if rule_id:
+                    suppressed_rules.add(rule_id)
+                if fp_file and fp_line:
+                    suppressed_locations.add((fp_file, fp_line))
+
+        return suppressed_rules, suppressed_locations, fp_count
+
+    @staticmethod
+    def _calculate_maintainability(
+        file_metrics: list[FileMetric], total_files: int
+    ) -> tuple[float, float]:
+        """Calculates Maintainability pillar score and average maintainability index."""
+        if total_files <= 0:
+            return 85.0, 85.0
+
+        avg_mi = sum((m.maintainability_index or 100.0) for m in file_metrics) / total_files
+        excess_cc = sum(max(0, (m.cyclomatic_complexity or 0) - 10) for m in file_metrics)
+        p_cc = min(25.0, 2.5 * (excess_cc / total_files))
+
+        excess_cog = sum(max(0, (m.cognitive_complexity or 0) - 12) for m in file_metrics)
+        p_cog = min(15.0, 1.5 * (excess_cog / total_files))
+
+        total_effort = sum(
+            float((m.halstead_metrics or {}).get("effort", 0.0) or 0.0) for m in file_metrics
+        )
+        p_halstead = min(10.0, total_effort / (1_000_000.0 * total_files))
+
+        maintainability = max(0.0, min(100.0, avg_mi - p_cc - p_cog - p_halstead))
+        return maintainability, avg_mi
+
+    @staticmethod
+    def _calculate_security(
+        issues: list[Issue],
+        suppressed_rules: set[str],
+        suppressed_locations: set[tuple[str, int]],
+    ) -> tuple[float, list[Issue]]:
+        """Calculates Security score subtracting penalties for validated vulnerabilities."""
+        security = 100.0
+        validated_sec_issues: list[Issue] = []
+
+        for issue in issues:
+            if issue.category != FindingCategory.SECURITY:
+                continue
+
+            is_suppressed = (
+                (issue.rule_id and issue.rule_id in suppressed_rules)
+                or ((issue.file_path, issue.line_start) in suppressed_locations)
+            )
+            if is_suppressed:
+                continue
+
+            validated_sec_issues.append(issue)
+            if issue.severity == FindingSeverity.CRITICAL:
+                security -= 25.0
+            elif issue.severity == FindingSeverity.HIGH:
+                security -= 15.0
+            elif issue.severity == FindingSeverity.MEDIUM:
+                security -= 8.0
+            elif issue.severity == FindingSeverity.LOW:
+                security -= 3.0
+
+        return max(0.0, security), validated_sec_issues
+
+    @staticmethod
+    def _calculate_architecture(
+        file_metrics: list[FileMetric],
+        issues: list[Issue],
+        circular_dependencies: list[list[str]] | None,
+        defect_predictions: list[Any] | None,
+        total_files: int,
+    ) -> tuple[float, int, int]:
+        """Calculates Architecture & Reliability score based on coupling, cycles, and defects."""
+        num_cycles = len(circular_dependencies) if circular_dependencies else 0
+        p_circular = 15.0 * num_cycles
+
+        def is_schema_or_dto(path: str) -> bool:
+            p = path.replace("\\", "/").lower()
+            return p.endswith("__init__.py") or "/schemas/" in p or "/dto/" in p or "/types/" in p
+
+        high_coupling_count = sum(
+            1
+            for m in file_metrics
+            if not is_schema_or_dto(m.file_path)
+            and ((m.function_count or 0) > 20 or (m.class_count or 0) > 6)
+        )
+        p_coupling = min(25.0, 3.0 * high_coupling_count)
+
+        # Defect risk penalty
+        p_defect_risk = 0.0
+        if defect_predictions and total_files > 0:
+            probs = [
+                float(getattr(dp, "defect_probability", 0.0) if hasattr(dp, "defect_probability") else dp.get("defect_probability", 0.0))
+                for dp in defect_predictions
+            ]
+            crit_count = sum(1 for p in probs if p >= 0.70)
+            avg_prob = sum(probs) / len(probs) if probs else 0.0
+            p_defect_risk = min(35.0, (30.0 * avg_prob) + (20.0 * (crit_count / total_files)))
+
+        # Smells penalty
+        arch_issues = [
+            i for i in issues if i.category in (FindingCategory.ARCHITECTURE, FindingCategory.CODE_SMELL)
+        ]
+        p_smells = 0.0
+        for issue in arch_issues:
+            if issue.severity in (FindingSeverity.CRITICAL, FindingSeverity.HIGH):
+                p_smells += 8.0
+            elif issue.severity == FindingSeverity.MEDIUM:
+                p_smells += 3.0
+            else:
+                p_smells += 1.0
+        p_smells = min(30.0, p_smells)
+
+        architecture = max(0.0, 100.0 - p_circular - p_coupling - p_defect_risk - p_smells)
+        return architecture, num_cycles, high_coupling_count
+
+    @staticmethod
+    def _calculate_testing(
+        file_metrics: list[FileMetric], total_files: int
+    ) -> tuple[float, list[FileMetric]]:
+        """Calculates Testing pillar score based on test-to-code ratio."""
+        test_files = [
+            m for m in file_metrics if ("test" in m.file_path.lower() or "spec" in m.file_path.lower())
+        ]
+        if total_files > 0:
+            total_loc = sum((m.sloc or 0) for m in file_metrics)
+            test_loc = sum((m.sloc or 0) for m in test_files)
+            if total_loc > 0 and len(test_files) > 0:
+                loc_ratio = test_loc / total_loc
+                file_ratio = len(test_files) / total_files
+                testing = min(100.0, max(20.0, (120.0 * loc_ratio) + (40.0 * file_ratio)))
+            elif len(test_files) > 0:
+                testing = min(100.0, max(30.0, (len(test_files) / total_files) * 300.0))
+            else:
+                testing = 25.0
+        else:
+            testing = 75.0
+
+        return testing, test_files
+
+    @staticmethod
+    def _calculate_technical_debt(
+        issues: list[Issue],
+        suppressed_rules: set[str],
+        suppressed_locations: set[tuple[str, int]],
+    ) -> int:
+        """Estimates total technical debt remediation time in minutes based on unsuppressed findings."""
+        debt = 0
+        for issue in issues:
+            if (
+                (issue.rule_id and issue.rule_id in suppressed_rules)
+                or ((issue.file_path, issue.line_start) in suppressed_locations)
+            ):
+                continue
+
+            if issue.severity == FindingSeverity.CRITICAL:
+                debt += 180
+            elif issue.severity == FindingSeverity.HIGH:
+                debt += 90
+            elif issue.severity == FindingSeverity.MEDIUM:
+                debt += 45
+            else:
+                debt += 15
+
+        return debt
+
+    @classmethod
+    def _build_radar_and_pillars(
+        cls,
+        security: float,
+        maintainability: float,
+        architecture: float,
+        testing: float,
+        avg_mi: float,
+        total_files: int,
+        validated_sec_issues: list[Issue],
+        fp_count: int,
+        num_cycles: int,
+        high_coupling_count: int,
+        test_files: list[FileMetric],
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Constructs standardized radar axis points and pillar score descriptors."""
+        radar_data = [
+            {"axis": "Security", "value": round(security, 1), "benchmark_value": 85.0},
+            {"axis": "Maintainability", "value": round(maintainability, 1), "benchmark_value": 78.0},
+            {"axis": "Architecture", "value": round(architecture, 1), "benchmark_value": 75.0},
+            {"axis": "Testing", "value": round(testing, 1), "benchmark_value": 70.0},
+            {"axis": "Reliability", "value": round(min(100.0, (security + architecture) / 2.0), 1), "benchmark_value": 80.0},
+        ]
+
+        pillars = [
+            {
+                "name": "Security",
+                "score": round(security, 1),
+                "weight": 0.35,
+                "weighted_contribution": round(0.35 * security, 1),
+                "grade": cls._assign_grade(security),
+                "benchmark_percentile": cls._calculate_percentile(security, 85.0),
+                "summary": f"{len(validated_sec_issues)} active security findings; {fp_count} suppressed false alarms.",
+            },
+            {
+                "name": "Maintainability",
+                "score": round(maintainability, 1),
+                "weight": 0.30,
+                "weighted_contribution": round(0.30 * maintainability, 1),
+                "grade": cls._assign_grade(maintainability),
+                "benchmark_percentile": cls._calculate_percentile(maintainability, 78.0),
+                "summary": f"Average MI {avg_mi:.1f} across {total_files} files." if total_files else "No files analyzed.",
+            },
+            {
+                "name": "Architecture",
+                "score": round(architecture, 1),
+                "weight": 0.20,
+                "weighted_contribution": round(0.20 * architecture, 1),
+                "grade": cls._assign_grade(architecture),
+                "benchmark_percentile": cls._calculate_percentile(architecture, 75.0),
+                "summary": f"{num_cycles} circular cycles; {high_coupling_count} high-coupling modules.",
+            },
+            {
+                "name": "Testing",
+                "score": round(testing, 1),
+                "weight": 0.15,
+                "weighted_contribution": round(0.15 * testing, 1),
+                "grade": cls._assign_grade(testing),
+                "benchmark_percentile": cls._calculate_percentile(testing, 70.0),
+                "summary": f"{len(test_files)} test files detected in repository.",
+            },
+        ]
+        return radar_data, pillars
 
     @staticmethod
     def _assign_grade(score: float) -> str:
@@ -338,7 +395,6 @@ class ScoringService:
     @staticmethod
     def _calculate_percentile(score: float, baseline: float) -> float:
         """Calculates approximate percentile ranking against baseline distribution."""
-        # Simple logistic approximation centered at baseline
         diff = score - baseline
         percentile = 50.0 + (diff * 1.5)
         return max(5.0, min(99.0, round(percentile, 1)))
@@ -425,11 +481,9 @@ class ScoringService:
                 "priority_weight": 65,
             })
 
-        # Sort by priority_weight descending and take top 3
         candidates.sort(key=lambda x: x["priority_weight"], reverse=True)
         top_recs = candidates[:3]
 
-        # Format with rank
         results: list[dict[str, Any]] = []
         for idx, rec in enumerate(top_recs, start=1):
             results.append({
