@@ -346,7 +346,7 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => handleUpgrade("price_team_monthly")}
+                  onClick={() => handleUpgrade(((import.meta as any).env?.VITE_STRIPE_PRICE_TEAM_MONTHLY as string) || "price_team_monthly")}
                   disabled={isProcessing}
                   className="w-full py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-indigo-500 hover:from-pink-600 hover:to-indigo-600 text-xs font-bold text-white transition flex items-center justify-center gap-2 shadow-lg"
                 >
